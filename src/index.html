@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電腦使用時間</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- 成就徽章 -->
+        <div id="achievement-badge" class="achievement-badge">
+            <span id="achievement-text">🏆 專注王者!</span>
+        </div>
+        
+        <!-- 停止警報按鈕 -->
+        <div id="alarm-stop-button" class="alarm-stop-button hidden">
+            <button id="stop-alarm-btn" class="stop-alarm-btn">
+                🔇 停止警報
+            </button>
+        </div>
+        
+        <!-- 功能按鈕 -->
+        <div class="feature-buttons">
+            <button id="sound-toggle" class="feature-btn sound-toggle" title="聲音開關">
+                🔊
+            </button>
+            <button id="refresh-btn" class="feature-btn" title="重新載入">
+                🔄
+            </button>
+            <button id="export-btn" class="feature-btn" title="匯出數據">
+                📊
+            </button>
+            <button id="charts-btn" class="feature-btn" title="統計圖表">
+                📈
+            </button>
+            <button id="theme-toggle" class="feature-btn" title="深色/淺色模式">
+                🌙
+            </button>
+        </div>
+        
+        <!-- 標題 -->
+        <h1 class="title">電腦使用時間</h1>
+        
+        <!-- 使用者選擇 -->
+        <div class="user-buttons">
+            <button id="user1" class="user-btn">品瑜</button>
+            <button id="user2" class="user-btn">品榕</button>
+        </div>
+        
+        <!-- 活動類別選擇 -->
+        <div class="category-section">
+            <div class="section-title">選擇活動類別</div>
+            <div class="category-selectors">
+                <button class="category-btn" data-category="遊戲">🎮 遊戲</button>
+                <button class="category-btn" data-category="YouTube">📺 YouTube</button>
+                <button class="category-btn" data-category="查資料">🔍 查資料</button>
+                <button class="category-btn" data-category="編寫文件">📝 編寫文件</button>
+                <button class="category-btn" data-category="學習">📚 學習</button>
+                <button class="category-btn" data-category="其他">⭐ 其他</button>
+            </div>
+        </div>
+        
+        <!-- 時間選擇 -->
+        <div class="time-section">
+            <div class="section-title">選擇時間長度</div>
+            <div class="time-selectors">
+                <button class="time-btn" data-minutes="5">5分鐘</button>
+                <button class="time-btn" data-minutes="10">10分鐘</button>
+                <button class="time-btn" data-minutes="15">15分鐘</button>
+                <button class="time-btn" data-minutes="20">20分鐘</button>
+                <button class="time-btn" data-minutes="30">30分鐘</button>
+            </div>
+        </div>
+        
+        <!-- 計時器圓圈 -->
+        <div class="timer-circle">
+            <svg class="progress-ring">
+                <circle class="progress-circle" cx="135" cy="135" r="115"></circle>
+                <circle id="progress-bar" class="progress-bar" cx="135" cy="135" r="115"></circle>
+            </svg>
+            
+            <div id="time-display" class="time-display">00:00</div>
+            <div id="user-display" class="user-display">請選擇使用者</div>
+            
+            <!-- 沙漏動畫 -->
+            <div id="sand-animation" class="sand-animation" style="display: none;">
+                <svg class="hourglass" viewBox="0 0 60 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path class="hourglass-shape" d="M12,8 L48,8 L48,22 L30,50 L48,78 L48,92 L12,92 L12,78 L30,50 L12,22 L12,8 Z" />
+                </svg>
+                <div class="top-sand"></div>
+                <div class="bottom-sand"></div>
+                <div class="sand-particle"></div>
+            </div>
+            
+            <!-- 完成動畫 -->
+            <div id="completed-animation" class="completed-animation">
+                <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="60" cy="60" r="58" stroke="white" stroke-width="4"/>
+                    <path d="M30 60L50 80L90 40" stroke="white" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>
+        </div>
+        
+        <!-- 控制按鈕 -->
+        <div class="control-buttons">
+            <button id="start-btn" class="control-btn">開始</button>
+            <button id="pause-btn" class="control-btn" disabled>暫停</button>
+            <button id="reset-btn" class="control-btn" disabled>重置</button>
+        </div>
+        
+        <!-- 今日使用統計 -->
+        <div class="stats-container">
+            <div class="stats-title">今日使用統計</div>
+            <div class="stats-row">
+                <span class="stats-user user1-color">品瑜</span>
+                <div>
+                    <span id="user1-total" class="stats-time user1-color">0分鐘</span>
+                    <span id="user1-sessions" class="stats-user" style="font-size: 12px; margin-left: 8px;">(0次)</span>
+                </div>
+            </div>
+            <div class="stats-row">
+                <span class="stats-user user2-color">品榕</span>
+                <div>
+                    <span id="user2-total" class="stats-time user2-color">0分鐘</span>
+                    <span id="user2-sessions" class="stats-user" style="font-size: 12px; margin-left: 8px;">(0次)</span>
+                </div>
+            </div>
+            <div class="stats-row" style="border-top: 1px solid rgba(255,255,255,0.2); padding-top: 10px; margin-top: 10px;">
+                <span class="stats-user">總計</span>
+                <span id="total-time" class="stats-time">0分鐘</span>
+            </div>
+        </div>
+        
+        <div id="sync-status" class="sync-status">準備就緒</div>
+    </div>
+    
+    <!-- 迷你模式界面 -->
+    <div id="mini-mode" class="mini-mode hidden" title="點擊返回正常界面">
+        <div class="mini-timer-display" id="mini-time-display">25:00</div>
+        <div class="mini-user-display" id="mini-user-display">使用者</div>
+    </div>
+    
+    <!-- Toast 通知 -->
+    <div id="toast" class="toast"></div>
+    
+    <!-- 匯出模態對話框 -->
+    <div id="export-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>匯出數據</h2>
+                <button id="modal-close" class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="export-options">
+                    <h3>選擇匯出格式：</h3>
+                    <button id="export-csv" class="export-option-btn">
+                        📄 CSV 格式
+                        <small>適合Excel等試算表軟體</small>
+                    </button>
+                    <button id="export-json" class="export-option-btn">
+                        🔧 JSON 格式
+                        <small>適合程式開發使用</small>
+                    </button>
+                </div>
+                <div class="export-range">
+                    <h3>選擇匯出範圍：</h3>
+                    <label><input type="radio" name="export-range" value="today" checked> 今日數據</label>
+                    <label><input type="radio" name="export-range" value="week"> 本週數據</label>
+                    <label><input type="radio" name="export-range" value="all"> 所有數據</label>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 統計圖表模態對話框 -->
+    <div id="charts-modal" class="modal hidden">
+        <div class="modal-content charts-modal-content">
+            <div class="modal-header">
+                <h2>統計圖表</h2>
+                <button id="charts-modal-close" class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="charts-container">
+                    <!-- 今日活動分佈餅圖 -->
+                    <div class="chart-section">
+                        <h3>今日活動分佈</h3>
+                        <canvas id="daily-pie-chart" width="300" height="300"></canvas>
+                        <div id="daily-chart-legend" class="chart-legend"></div>
+                    </div>
+                    
+                    <!-- 用戶對比圖 -->
+                    <div class="chart-section">
+                        <h3>用戶使用對比</h3>
+                        <canvas id="user-comparison-chart" width="300" height="200"></canvas>
+                        <div id="user-chart-legend" class="chart-legend"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="renderer.js"></script>
+</body>
+</html>
