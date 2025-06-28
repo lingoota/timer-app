@@ -13,6 +13,8 @@
 | TDR-005 | 2025-06-22 | 實施智能窗口攔截機制 | ✅ 已實施 |
 | TDR-006 | 2025-06-22 | v1.1.0 功能擴展與問題修復 | ✅ 已實施 |
 | TDR-007 | 2025-06-26 | 應用程式打包與分發 | ✅ 已實施 |
+| TDR-008 | 2025-06-28 | Google Sheets 連動問題修復 | ✅ 已實施 |
+| TDR-009 | 2025-06-28 | Git 版本控制系統建立 | ✅ 已實施 |
 
 ---
 
@@ -397,3 +399,191 @@ mainWindow.on('minimize', (event) => {
 - **Linux**: 下載 AppImage 檔案，賦予執行權限後雙擊執行
 - **檔案大小**: 約 100-150MB (包含 Electron 運行時)
 - **啟動速度**: 2-3 秒 (冷啟動)
+
+---
+
+## TDR-008: Google Sheets 連動問題修復
+
+### 背景
+應用程式在啟動時無法正常載入Google Sheets中的今日使用記錄，導致統計數據顯示不正確。
+
+### 問題診斷
+經過檢查發現主要問題在於 `renderer.js:339` 存在JavaScript語法錯誤：
+```javascript
+// 錯誤的CSS選擇器語法
+const range = document.querySelector('input[name="export-range']:checked').value;
+//                                                             ↑ 缺少結尾括號
+```
+
+### 決策
+修復JavaScript語法錯誤並增強調試機制。
+
+### 實施內容
+
+#### 🐛 問題修復
+1. **CSS選擇器語法修復**
+   ```javascript
+   // 修復前：缺少括號
+   const range = document.querySelector('input[name="export-range']:checked').value;
+   
+   // 修復後：完整語法
+   const range = document.querySelector('input[name="export-range"]:checked').value;
+   ```
+
+2. **增強調試日誌**
+   - 在主進程的 `fetchGoogleScript()` 函數中加入詳細的請求/響應日誌
+   - 在渲染進程的 `loadDataFromSheets()` 函數中加入完整的調試輸出
+   - 設置 `maxRedirects: 5` 確保Google Apps Script重定向正常處理
+
+#### ✅ 驗證結果
+修復後的連動測試顯示：
+```
+=== 發送請求到 Google Apps Script ===
+URL: https://script.google.com/macros/s/AKfycbx.../exec?action=getTodayTotal&date=2025%2F06%2F28
+=== 響應狀態 ===
+Status: 200
+Data: {
+  result: 'success',
+  user1Total: 5400,    // 品瑜: 90分鐘
+  user2Total: 9300,    // 品榕: 155分鐘
+  user1Sessions: 5,
+  user2Sessions: 8
+}
+```
+
+### 技術選擇
+
+#### 調試策略
+- **選擇**: 增加詳細的console.log輸出
+- **原因**: JavaScript語法錯誤會阻止後續代碼執行，詳細日誌有助於快速定位問題
+- **替代方案**: 使用try-catch捕獲（無法捕獲語法錯誤）
+
+#### 錯誤處理增強
+- **選擇**: 保留原有的三層錯誤處理（本地備份、網路請求失敗、解析錯誤）
+- **原因**: 確保應用程式在各種網路環境下都能正常運作
+- **改進**: 更明確的錯誤提示訊息
+
+### 實施結果
+- ✅ Google Sheets讀取功能完全恢復
+- ✅ 今日使用統計正確顯示
+- ✅ 雲端同步功能正常運作
+- ✅ 調試機制完善，便於未來問題排查
+
+### 影響評估
+- **正面影響**:
+  - 核心功能恢復正常
+  - 用戶數據準確同步
+  - 建立了更好的調試基礎
+- **無負面影響**: 純粹的錯誤修復，不影響其他功能
+
+---
+
+## TDR-009: Git 版本控制系統建立
+
+### 背景
+為了更好地管理專案代碼、追蹤變更歷史和實現雲端備份，需要建立完整的Git版本控制系統。
+
+### 決策
+建立基於Git的版本控制工作流程，連接GitHub進行雲端代碼託管。
+
+### 實施內容
+
+#### 📋 Git倉庫初始化
+1. **本地倉庫建立**
+   ```bash
+   git init                    # 初始化Git倉庫
+   git branch -M main          # 設置主分支為main
+   ```
+
+2. **忽略檔案配置**
+   - 創建 `.gitignore` 檔案
+   - 排除 `node_modules/`, `dist/`, `package-lock.json` 等不需要版本控制的檔案
+   - 排除系統檔案和編輯器配置檔案
+
+3. **用戶配置**
+   ```bash
+   git config --global user.name "lingoota"
+   git config --global user.email "lingoota@msn.com"
+   ```
+
+#### 🚀 初始提交
+- **提交範圍**: 13個核心檔案
+  - 應用程式主要代碼 (`main.js`, `src/`)
+  - 配置檔案 (`package.json`)
+  - 文檔檔案 (`*.md`)
+  - 設定檔案 (`.gitignore`)
+
+- **提交訊息格式**: 採用結構化提交訊息
+  ```
+  Initial commit: 電腦使用時間追蹤計時器應用
+  
+  - 功能列表
+  - 🤖 Generated with [Claude Code](https://claude.ai/code)
+  - Co-Authored-By: Claude <noreply@anthropic.com>
+  ```
+
+#### 🌐 GitHub整合
+1. **遠端倉庫連接**
+   ```bash
+   git remote add origin https://github.com/lingoota/timer-app.git
+   ```
+
+2. **雲端備份準備**
+   - 配置完成，等待用戶手動推送
+   - 提供推送指令: `git push -u origin main`
+
+### 技術選擇
+
+#### Git vs 其他版本控制
+- **選擇**: Git
+- **原因**: 
+  - 業界標準，生態系統完整
+  - 分散式架構，本地完整歷史
+  - GitHub整合度最高
+  - 豐富的工具支援
+- **替代方案**: SVN, Mercurial (使用率較低)
+
+#### GitHub vs 其他託管平台
+- **選擇**: GitHub
+- **原因**:
+  - 最大的開源社群
+  - 免費私人倉庫
+  - 優秀的Web界面
+  - 豐富的CI/CD整合
+- **替代方案**: GitLab, Bitbucket (功能相似)
+
+#### .gitignore 策略
+- **選擇**: 排除所有建置產物和依賴
+- **原因**:
+  - 減少倉庫大小
+  - 避免平台特定檔案衝突
+  - 專注於源代碼版本控制
+- **包含**: 源代碼、配置、文檔
+- **排除**: node_modules, dist, logs, 系統檔案
+
+### 實施結果
+- ✅ Git倉庫成功初始化
+- ✅ 完整的 `.gitignore` 配置
+- ✅ 初始提交包含所有核心檔案
+- ✅ GitHub遠端倉庫連接就緒
+- ✅ 建立標準化的版本控制工作流程
+
+### 未來工作流程
+```bash
+# 日常開發流程
+git add .                           # 暫存變更
+git commit -m "描述變更內容"        # 提交變更
+git push                           # 推送到GitHub
+
+# 查看歷史
+git log --oneline                  # 查看提交歷史
+git status                         # 查看當前狀態
+```
+
+### 影響評估
+- **正面影響**:
+  - 建立完整的代碼歷史追蹤
+  - 實現雲端代碼備份
+  - 支援多人協作開發
+  - 便於版本發布管理
+- **維護成本**: 極低，只需要定期提交變更
