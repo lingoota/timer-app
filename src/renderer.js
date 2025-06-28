@@ -1410,18 +1410,24 @@ document.addEventListener('DOMContentLoaded', function() {
     // 設置用戶選擇事件監聽器
     function setupUserSelectionEvents() {
         // 用戶選擇按鈕
-        dom.selectUser1Btn.addEventListener('click', () => {
-            selectUserAndRemember('user1');
-        });
+        if (dom.selectUser1Btn) {
+            dom.selectUser1Btn.addEventListener('click', () => {
+                selectUserAndRemember('user1');
+            });
+        }
         
-        dom.selectUser2Btn.addEventListener('click', () => {
-            selectUserAndRemember('user2');
-        });
+        if (dom.selectUser2Btn) {
+            dom.selectUser2Btn.addEventListener('click', () => {
+                selectUserAndRemember('user2');
+            });
+        }
         
         // 用戶設定按鈕（重新選擇用戶）
-        dom.userSettingsBtn.addEventListener('click', () => {
-            showUserSelection();
-        });
+        if (dom.userSettingsBtn) {
+            dom.userSettingsBtn.addEventListener('click', () => {
+                showUserSelection();
+            });
+        }
     }
     
     // 選擇用戶並記憶
