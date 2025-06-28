@@ -8,6 +8,37 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- 用戶選擇覆蓋層 -->
+    <div id="user-selection-overlay" class="user-selection-overlay hidden">
+        <div class="user-selection-modal">
+            <h2 class="modal-title">歡迎使用電腦時間追蹤器</h2>
+            <p class="modal-subtitle">請選擇你的身份</p>
+            
+            <div class="user-selection-buttons">
+                <button id="select-user1" class="user-selection-btn" data-user="user1">
+                    <div class="user-avatar">👤</div>
+                    <div class="user-name">品瑜</div>
+                </button>
+                <button id="select-user2" class="user-selection-btn" data-user="user2">
+                    <div class="user-avatar">👤</div>
+                    <div class="user-name">品榕</div>
+                </button>
+            </div>
+            
+            <div class="remember-choice">
+                <label class="remember-label">
+                    <input type="checkbox" id="remember-user" checked>
+                    <span class="checkmark"></span>
+                    記住我的選擇
+                </label>
+            </div>
+            
+            <div class="modal-note">
+                下次可在設定中修改預設用戶
+            </div>
+        </div>
+    </div>
+
     <div class="container">
         <!-- 成就徽章 -->
         <div id="achievement-badge" class="achievement-badge">
@@ -38,15 +69,18 @@
             <button id="theme-toggle" class="feature-btn" title="深色/淺色模式">
                 🌙
             </button>
+            <button id="user-settings" class="feature-btn" title="切換用戶">
+                👤
+            </button>
         </div>
         
         <!-- 標題 -->
         <h1 class="title">電腦使用時間</h1>
         
-        <!-- 使用者選擇 -->
-        <div class="user-buttons">
-            <button id="user1" class="user-btn">品瑜</button>
-            <button id="user2" class="user-btn">品榕</button>
+        <!-- 當前使用者顯示 -->
+        <div class="current-user-display">
+            <span class="current-user-label">當前用戶：</span>
+            <span id="current-user-name" class="current-user-name">未選擇</span>
         </div>
         
         <!-- 活動類別選擇 -->

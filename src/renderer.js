@@ -12,6 +12,13 @@ document.addEventListener('DOMContentLoaded', function() {
         progressBar: document.getElementById('progress-bar'),
         user1Btn: document.getElementById('user1'),
         user2Btn: document.getElementById('user2'),
+        // 用戶選擇相關
+        userSelectionOverlay: document.getElementById('user-selection-overlay'),
+        selectUser1Btn: document.getElementById('select-user1'),
+        selectUser2Btn: document.getElementById('select-user2'),
+        rememberUserCheckbox: document.getElementById('remember-user'),
+        currentUserName: document.getElementById('current-user-name'),
+        userSettingsBtn: document.getElementById('user-settings'),
         user1Total: document.getElementById('user1-total'),
         user2Total: document.getElementById('user2-total'),
         user1Sessions: document.getElementById('user1-sessions'),
@@ -88,6 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadLocalBackup();
     updateStatsDisplay();
     initializeTheme();
+    initializeUserSelection();
     
     // 延遲載入雲端數據，讓本地數據先顯示
     setTimeout(() => {
@@ -243,46 +251,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
-    // 使用者選擇
-    dom.user1Btn.addEventListener('click', function() {
-        if (!state.isRunning) {
-            state.selectedUser = 'user1';
-            dom.userDisplay.textContent = '品瑜';
-            dom.userDisplay.className = 'user-display user1-color';
-            dom.user1Btn.classList.add('active');
-            dom.user2Btn.classList.remove('active');
-            
-            const computedStyle = getComputedStyle(document.documentElement);
-            const user1Color = computedStyle.getPropertyValue('--user1-color').trim();
-            dom.progressBar.setAttribute('stroke', user1Color);
-            
-            checkStartButtonState();
-            
-            if (state.totalDuration === 0) {
-                showToast('請選擇時間');
-            }
-        }
-    });
-    
-    dom.user2Btn.addEventListener('click', function() {
-        if (!state.isRunning) {
-            state.selectedUser = 'user2';
-            dom.userDisplay.textContent = '品榕';
-            dom.userDisplay.className = 'user-display user2-color';
-            dom.user2Btn.classList.add('active');
-            dom.user1Btn.classList.remove('active');
-            
-            const computedStyle = getComputedStyle(document.documentElement);
-            const user2Color = computedStyle.getPropertyValue('--user2-color').trim();
-            dom.progressBar.setAttribute('stroke', user2Color);
-            
-            checkStartButtonState();
-            
-            if (state.totalDuration === 0) {
-                showToast('請選擇時間');
-            }
-        }
-    });
+    // 舊的用戶選擇按鈕已移除，現在使用啟動時選擇 + 記憶功能
     
     // 重新整理按鈕
     refreshBtn.addEventListener('click', function(e) {
@@ -1384,4 +1353,100 @@ document.addEventListener('DOMContentLoaded', function() {
             dom.container.classList.remove('hidden');
         }
     });
+    
+    // === 用戶選擇功能 ===
+    
+    // 初始化用戶選擇
+    function initializeUserSelection() {
+        // 檢查是否有記住的用戶
+        const rememberedUser = localStorage.getItem('rememberedUser');
+        
+        if (rememberedUser) {
+            // 如果有記住的用戶，直接設置並隱藏選擇界面
+            setSelectedUser(rememberedUser);
+            hideUserSelection();
+        } else {
+            // 沒有記住的用戶，顯示選擇界面
+            showUserSelection();
+        }
+        
+        // 綁定事件監聽器
+        setupUserSelectionEvents();
+    }
+    
+    // 顯示用戶選擇界面
+    function showUserSelection() {
+        dom.userSelectionOverlay.classList.remove('hidden');
+    }
+    
+    // 隱藏用戶選擇界面
+    function hideUserSelection() {
+        dom.userSelectionOverlay.classList.add('hidden');
+    }
+    
+    // 設置選中的用戶
+    function setSelectedUser(user) {
+        state.selectedUser = user;
+        const userName = user === 'user1' ? '品瑜' : '品榕';
+        
+        // 更新當前用戶顯示
+        dom.currentUserName.textContent = userName;
+        
+        // 更新用戶顯示區域
+        dom.userDisplay.textContent = userName;
+        dom.userDisplay.className = `user-display ${user}-color`;
+        
+        // 更新進度條顏色
+        const computedStyle = getComputedStyle(document.documentElement);
+        const userColor = computedStyle.getPropertyValue(`--${user}-color`).trim();
+        dom.progressBar.setAttribute('stroke', userColor);
+        
+        // 檢查開始按鈕狀態
+        checkStartButtonState();
+        
+        console.log('用戶設置為:', userName);
+    }
+    
+    // 設置用戶選擇事件監聽器
+    function setupUserSelectionEvents() {
+        // 用戶選擇按鈕
+        dom.selectUser1Btn.addEventListener('click', () => {
+            selectUserAndRemember('user1');
+        });
+        
+        dom.selectUser2Btn.addEventListener('click', () => {
+            selectUserAndRemember('user2');
+        });
+        
+        // 用戶設定按鈕（重新選擇用戶）
+        dom.userSettingsBtn.addEventListener('click', () => {
+            showUserSelection();
+        });
+    }
+    
+    // 選擇用戶並記憶
+    function selectUserAndRemember(user) {
+        // 設置選中的用戶
+        setSelectedUser(user);
+        
+        // 如果勾選了記住選擇，保存到本地存儲
+        if (dom.rememberUserCheckbox.checked) {
+            localStorage.setItem('rememberedUser', user);
+            showToast('已記住用戶選擇');
+        }
+        
+        // 隱藏選擇界面
+        hideUserSelection();
+    }
+    
+    // 清除記住的用戶（用於重新選擇）
+    function clearRememberedUser() {
+        localStorage.removeItem('rememberedUser');
+        state.selectedUser = null;
+        dom.currentUserName.textContent = '未選擇';
+        showUserSelection();
+    }
+    
+    // 暴露給全局使用（調試用）
+    window.clearRememberedUser = clearRememberedUser;
 });
