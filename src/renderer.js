@@ -1665,6 +1665,269 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('冷卻期更新定時器已啟動');
     }
     
+    // === 匯出功能實現 ===
+    
+    // 匯出數據函數
+    async function exportData(format, range) {
+        console.log(`開始匯出數據 - 格式: ${format}, 範圍: ${range}`);
+        
+        try {
+            // 根據範圍獲取數據
+            let exportData = [];
+            const today = new Date().toDateString();
+            
+            if (range === 'today') {
+                // 從本地存儲獲取今日數據
+                const localData = localStorage.getItem('timerAppBackup');
+                if (localData) {
+                    const data = JSON.parse(localData);
+                    exportData = [{
+                        date: today,
+                        user1Total: data.user1TotalTime || 0,
+                        user1Sessions: data.user1SessionCount || 0,
+                        user2Total: data.user2TotalTime || 0,
+                        user2Sessions: data.user2SessionCount || 0
+                    }];
+                }
+            } else if (range === 'week' || range === 'all') {
+                // 嘗試從 Google Sheets 獲取歷史數據
+                try {
+                    const url = `${SCRIPT_URL}?action=exportData&range=${range}`;
+                    const response = await window.api.invoke('fetch-google-script', url);
+                    
+                    if (response.success && response.data) {
+                        exportData = response.data.weekData || response.data.allData || [];
+                    }
+                } catch (error) {
+                    console.log('從雲端獲取數據失敗，使用本地數據');
+                    // 使用本地數據作為後備
+                    const localData = localStorage.getItem('timerAppBackup');
+                    if (localData) {
+                        const data = JSON.parse(localData);
+                        exportData = [{
+                            date: today,
+                            user1Total: data.user1TotalTime || 0,
+                            user1Sessions: data.user1SessionCount || 0,
+                            user2Total: data.user2TotalTime || 0,
+                            user2Sessions: data.user2SessionCount || 0
+                        }];
+                    }
+                }
+            }
+            
+            if (exportData.length === 0) {
+                showToast('暫無數據可匯出');
+                return;
+            }
+            
+            // 根據格式匯出
+            if (format === 'csv') {
+                exportToCsv(exportData, range);
+            } else if (format === 'json') {
+                exportToJson(exportData, range);
+            }
+            
+        } catch (error) {
+            console.error('匯出數據時發生錯誤:', error);
+            showToast('匯出失敗，請稍後再試');
+        }
+    }
+    
+    // 匯出為 CSV 格式
+    function exportToCsv(data, range) {
+        const headers = ['日期', '品瑜總時間(分鐘)', '品瑜會話次數', '品榕總時間(分鐘)', '品榕會話次數'];
+        const csvContent = [
+            headers.join(','),
+            ...data.map(row => [
+                row.date || '今日',
+                Math.round((row.user1Total || 0) / 60),
+                row.user1Sessions || 0,
+                Math.round((row.user2Total || 0) / 60),
+                row.user2Sessions || 0
+            ].join(','))
+        ].join('\n');
+        
+        downloadFile(csvContent, `timer-data-${range}-${new Date().toISOString().split('T')[0]}.csv`, 'text/csv');
+        showToast('CSV 檔案已下載');
+    }
+    
+    // 匯出為 JSON 格式
+    function exportToJson(data, range) {
+        const jsonContent = JSON.stringify({
+            exportDate: new Date().toISOString(),
+            range: range,
+            data: data.map(row => ({
+                date: row.date || '今日',
+                user1: {
+                    totalMinutes: Math.round((row.user1Total || 0) / 60),
+                    sessions: row.user1Sessions || 0
+                },
+                user2: {
+                    totalMinutes: Math.round((row.user2Total || 0) / 60),
+                    sessions: row.user2Sessions || 0
+                }
+            }))
+        }, null, 2);
+        
+        downloadFile(jsonContent, `timer-data-${range}-${new Date().toISOString().split('T')[0]}.json`, 'application/json');
+        showToast('JSON 檔案已下載');
+    }
+    
+    // 下載檔案輔助函數
+    function downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    // === 圖表功能實現 ===
+    
+    // 渲染圖表函數
+    function renderCharts() {
+        console.log('開始渲染圖表');
+        
+        try {
+            // 獲取當前數據
+            const user1Minutes = Math.round(state.user1TotalTime / 60);
+            const user2Minutes = Math.round(state.user2TotalTime / 60);
+            const user1Sessions = state.user1SessionCount;
+            const user2Sessions = state.user2SessionCount;
+            
+            // 渲染今日活動分佈餅圖
+            renderDailyPieChart(user1Minutes, user2Minutes);
+            
+            // 渲染用戶對比圖
+            renderUserComparisonChart(user1Minutes, user1Sessions, user2Minutes, user2Sessions);
+            
+            showToast('圖表已更新');
+        } catch (error) {
+            console.error('渲染圖表時發生錯誤:', error);
+            showToast('圖表渲染失敗');
+        }
+    }
+    
+    // 渲染今日活動分佈餅圖
+    function renderDailyPieChart(user1Minutes, user2Minutes) {
+        const canvas = dom.dailyPieChart;
+        const ctx = canvas.getContext('2d');
+        const total = user1Minutes + user2Minutes;
+        
+        // 清除畫布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        if (total === 0) {
+            // 沒有數據時顯示提示
+            ctx.fillStyle = '#666';
+            ctx.font = '16px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('暫無數據', canvas.width / 2, canvas.height / 2);
+            return;
+        }
+        
+        // 繪製餅圖
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = Math.min(centerX, centerY) - 20;
+        
+        const user1Angle = (user1Minutes / total) * 2 * Math.PI;
+        const user2Angle = (user2Minutes / total) * 2 * Math.PI;
+        
+        // 品瑜的部分（藍色）
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, 0, user1Angle);
+        ctx.lineTo(centerX, centerY);
+        ctx.fillStyle = 'rgb(100, 220, 255)';
+        ctx.fill();
+        
+        // 品榕的部分（橙色）
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, radius, user1Angle, user1Angle + user2Angle);
+        ctx.lineTo(centerX, centerY);
+        ctx.fillStyle = 'rgb(255, 180, 100)';
+        ctx.fill();
+        
+        // 更新圖例
+        updateDailyChartLegend(user1Minutes, user2Minutes);
+    }
+    
+    // 渲染用戶對比圖
+    function renderUserComparisonChart(user1Minutes, user1Sessions, user2Minutes, user2Sessions) {
+        const canvas = dom.userComparisonChart;
+        const ctx = canvas.getContext('2d');
+        
+        // 清除畫布
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const maxValue = Math.max(user1Minutes, user2Minutes, 1);
+        const barWidth = 80;
+        const barMaxHeight = canvas.height - 60;
+        
+        // 品瑜的柱子
+        const user1Height = (user1Minutes / maxValue) * barMaxHeight;
+        ctx.fillStyle = 'rgb(100, 220, 255)';
+        ctx.fillRect(50, canvas.height - 30 - user1Height, barWidth, user1Height);
+        
+        // 品榕的柱子
+        const user2Height = (user2Minutes / maxValue) * barMaxHeight;
+        ctx.fillStyle = 'rgb(255, 180, 100)';
+        ctx.fillRect(170, canvas.height - 30 - user2Height, barWidth, user2Height);
+        
+        // 添加標籤
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText('品瑜', 90, canvas.height - 10);
+        ctx.fillText('品榕', 210, canvas.height - 10);
+        
+        // 添加數值標籤
+        ctx.font = '12px Arial';
+        ctx.fillText(`${user1Minutes}分`, 90, canvas.height - 35 - user1Height);
+        ctx.fillText(`${user2Minutes}分`, 210, canvas.height - 35 - user2Height);
+        
+        // 更新圖例
+        updateUserChartLegend(user1Minutes, user1Sessions, user2Minutes, user2Sessions);
+    }
+    
+    // 更新今日圖表圖例
+    function updateDailyChartLegend(user1Minutes, user2Minutes) {
+        const total = user1Minutes + user2Minutes;
+        const user1Percent = total > 0 ? Math.round((user1Minutes / total) * 100) : 0;
+        const user2Percent = total > 0 ? Math.round((user2Minutes / total) * 100) : 0;
+        
+        dom.dailyChartLegend.innerHTML = `
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: rgb(100, 220, 255);"></div>
+                <span>品瑜: ${user1Minutes}分鐘 (${user1Percent}%)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: rgb(255, 180, 100);"></div>
+                <span>品榕: ${user2Minutes}分鐘 (${user2Percent}%)</span>
+            </div>
+        `;
+    }
+    
+    // 更新用戶對比圖例
+    function updateUserChartLegend(user1Minutes, user1Sessions, user2Minutes, user2Sessions) {
+        dom.userChartLegend.innerHTML = `
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: rgb(100, 220, 255);"></div>
+                <span>品瑜: ${user1Minutes}分鐘 (${user1Sessions}次)</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background-color: rgb(255, 180, 100);"></div>
+                <span>品榕: ${user2Minutes}分鐘 (${user2Sessions}次)</span>
+            </div>
+        `;
+    }
+    
     // 暴露給全局使用（調試用）
     window.clearRememberedUser = clearRememberedUser;
+    window.exportData = exportData;
+    window.renderCharts = renderCharts;
 });
