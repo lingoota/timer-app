@@ -513,4 +513,30 @@ function setupIpcHandlers() {
       console.log('窗口已置頂並獲得焦點');
     }
   });
+
+  // 處理來自渲染進程的手動恢復請求
+  ipcMain.on('restore-timer', (event) => {
+    console.log('收到手動恢復迷你模式請求');
+    if (mainWindow && isMinimized) {
+      restoreFromMiniMode();
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+
+  // 強制同步迷你模式狀態
+  ipcMain.on('sync-mini-mode-state', (event, rendererMiniMode) => {
+    console.log('同步迷你模式狀態 - 主進程:', isMinimized, '渲染進程:', rendererMiniMode);
+    
+    if (isMinimized !== rendererMiniMode) {
+      console.log('檢測到狀態不同步，進行修復');
+      if (rendererMiniMode && !isMinimized) {
+        // 渲染進程認為在迷你模式，但主進程不是
+        isMinimized = true;
+      } else if (!rendererMiniMode && isMinimized) {
+        // 主進程認為在迷你模式，但渲染進程不是
+        restoreFromMiniMode();
+      }
+    }
+  });
 }
