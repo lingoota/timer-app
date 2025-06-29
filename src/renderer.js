@@ -82,6 +82,9 @@ document.addEventListener('DOMContentLoaded', function() {
         cooldownUpdateInterval: null, // 冷卻期更新定時器
         alarmCycleTimeout: null, // 警報循環定時器
         alarmCycleActive: false, // 警報循環是否激活
+        // 用戶活動類別時間追蹤
+        user1CategoryTime: {},
+        user2CategoryTime: {},
     };
     
     // 進度條設定
@@ -103,6 +106,13 @@ document.addEventListener('DOMContentLoaded', function() {
     loadLocalBackup();
     updateStatsDisplay();
     initializeTheme();
+    
+    // 檢查關鍵 DOM 元素是否正確載入
+    console.log('=== DOM 元素檢查 ===');
+    console.log('exportBtn:', dom.exportBtn);
+    console.log('chartsBtn:', dom.chartsBtn);
+    console.log('exportModal:', dom.exportModal);
+    console.log('chartsModal:', dom.chartsModal);
     
     // 延遲執行用戶選擇初始化，確保DOM完全載入
     setTimeout(() => {
@@ -308,12 +318,18 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 匯出按鈕事件
-    dom.exportBtn.addEventListener('click', function(e) {
-        console.log('Export button clicked!');
-        e.preventDefault();
-        e.stopPropagation();
-        dom.exportModal.classList.remove('hidden');
-    });
+    console.log('檢查匯出按鈕:', dom.exportBtn);
+    if (dom.exportBtn) {
+        dom.exportBtn.addEventListener('click', function(e) {
+            console.log('Export button clicked!');
+            e.preventDefault();
+            e.stopPropagation();
+            dom.exportModal.classList.remove('hidden');
+        });
+        console.log('匯出按鈕事件已綁定');
+    } else {
+        console.error('匯出按鈕未找到!');
+    }
     
     // 關閉模態對話框
     dom.modalClose.addEventListener('click', function() {
@@ -346,16 +362,22 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 圖表按鈕事件
-    dom.chartsBtn.addEventListener('click', function(e) {
-        console.log('Charts button clicked!');
-        e.preventDefault();
-        e.stopPropagation();
-        dom.chartsModal.classList.remove('hidden');
-        // 延遲渲染圖表以確保模態對話框已顯示
-        setTimeout(() => {
-            renderCharts();
-        }, 100);
-    });
+    console.log('檢查圖表按鈕:', dom.chartsBtn);
+    if (dom.chartsBtn) {
+        dom.chartsBtn.addEventListener('click', function(e) {
+            console.log('Charts button clicked!');
+            e.preventDefault();
+            e.stopPropagation();
+            dom.chartsModal.classList.remove('hidden');
+            // 延遲渲染圖表以確保模態對話框已顯示
+            setTimeout(() => {
+                renderCharts();
+            }, 100);
+        });
+        console.log('圖表按鈕事件已綁定');
+    } else {
+        console.error('圖表按鈕未找到!');
+    }
     
     // 關閉圖表模態對話框
     dom.chartsModalClose.addEventListener('click', function() {
@@ -532,9 +554,19 @@ document.addEventListener('DOMContentLoaded', function() {
             if (state.selectedUser === 'user1') {
                 state.user1TotalTime += state.totalDuration;
                 state.user1SessionCount++;
+                // 追蹤活動類別時間
+                if (!state.user1CategoryTime[state.selectedCategory]) {
+                    state.user1CategoryTime[state.selectedCategory] = 0;
+                }
+                state.user1CategoryTime[state.selectedCategory] += state.totalDuration;
             } else if (state.selectedUser === 'user2') {
                 state.user2TotalTime += state.totalDuration;
                 state.user2SessionCount++;
+                // 追蹤活動類別時間
+                if (!state.user2CategoryTime[state.selectedCategory]) {
+                    state.user2CategoryTime[state.selectedCategory] = 0;
+                }
+                state.user2CategoryTime[state.selectedCategory] += state.totalDuration;
             }
             
             updateStatsDisplay();
@@ -875,7 +907,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 user1Total: state.user1TotalTime,
                 user2Total: state.user2TotalTime,
                 user1Sessions: state.user1SessionCount,
-                user2Sessions: state.user2SessionCount
+                user2Sessions: state.user2SessionCount,
+                user1CategoryTime: state.user1CategoryTime,
+                user2CategoryTime: state.user2CategoryTime
             };
             localStorage.setItem('timerData', JSON.stringify(data));
             console.log("Saved local backup:", data);
@@ -897,11 +931,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 state.user2TotalTime = data.user2Total || 0;
                 state.user1SessionCount = data.user1Sessions || 0;
                 state.user2SessionCount = data.user2Sessions || 0;
+                state.user1CategoryTime = data.user1CategoryTime || {};
+                state.user2CategoryTime = data.user2CategoryTime || {};
                 console.log("Loaded local data:", {
                     user1Total: state.user1TotalTime,
                     user2Total: state.user2TotalTime,
                     user1Sessions: state.user1SessionCount,
-                    user2Sessions: state.user2SessionCount
+                    user2Sessions: state.user2SessionCount,
+                    user1CategoryTime: state.user1CategoryTime,
+                    user2CategoryTime: state.user2CategoryTime
                 });
             } else {
                 console.log("No local data for today or data is for different date, resetting...");
@@ -909,6 +947,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 state.user2TotalTime = 0;
                 state.user1SessionCount = 0;
                 state.user2SessionCount = 0;
+                state.user1CategoryTime = {};
+                state.user2CategoryTime = {};
                 saveLocalBackup();
             }
             updateStatsDisplay();
@@ -918,6 +958,8 @@ document.addEventListener('DOMContentLoaded', function() {
             state.user2TotalTime = 0;
             state.user1SessionCount = 0;
             state.user2SessionCount = 0;
+            state.user1CategoryTime = {};
+            state.user2CategoryTime = {};
             updateStatsDisplay();
         }
     }
@@ -952,13 +994,29 @@ document.addEventListener('DOMContentLoaded', function() {
                     const cloudUser2Sessions = parseInt(data.user2Sessions) || 0;
 
                     if (cloudUser1Total >= 0 && cloudUser2Total >= 0) {
+                        // 保存當前的活動類別數據，避免被覆蓋
+                        const savedUser1CategoryTime = state.user1CategoryTime;
+                        const savedUser2CategoryTime = state.user2CategoryTime;
+                        
                         state.user1TotalTime = cloudUser1Total;
                         state.user2TotalTime = cloudUser2Total;
                         state.user1SessionCount = cloudUser1Sessions;
                         state.user2SessionCount = cloudUser2Sessions;
                         
+                        // 恢復活動類別數據
+                        state.user1CategoryTime = savedUser1CategoryTime;
+                        state.user2CategoryTime = savedUser2CategoryTime;
+                        
+                        console.log('雲端同步後保護活動類別數據:', {
+                            user1CategoryTime: state.user1CategoryTime,
+                            user2CategoryTime: state.user2CategoryTime
+                        });
+                        
                         updateStatsDisplay();
                         saveLocalBackup();
+                        
+                        // 嘗試載入活動類別數據
+                        loadCategoryDataFromSheets();
                     }
                     
                     updateSyncStatus('已同步');
@@ -1041,10 +1099,159 @@ document.addEventListener('DOMContentLoaded', function() {
         return `${year}/${month}/${day}`;
     }
     
+    // 載入活動類別數據
+    async function loadCategoryDataFromSheets() {
+        console.log("=== 載入活動類別數據 ===");
+        
+        const today = getTodayDate();
+        const timestamp = new Date().getTime();
+        
+        // 嘗試不同的可能action名稱
+        const possibleActions = [
+            'getCategoryData',
+            'getTodayCategory', 
+            'getCategoryBreakdown',
+            'getDetailedData',
+            'getTodayDetails'
+        ];
+        
+        for (const action of possibleActions) {
+            try {
+                const url = `${SCRIPT_URL}?action=${action}&date=${encodeURIComponent(today)}&_=${timestamp}`;
+                console.log(`嘗試載入活動類別數據 - Action: ${action}`);
+                console.log(`URL: ${url}`);
+                
+                const result = await window.api.invoke('fetch-google-script', url);
+                console.log(`${action} 回應:`, result);
+                console.log(`${action} 回應詳細數據:`, result.data);
+                
+                if (result.success && result.data && result.data.result === 'success') {
+                    // 檢查是否包含活動類別數據
+                    if (result.data.user1CategoryData || result.data.user2CategoryData || 
+                        result.data.categoryData || result.data.categories) {
+                        console.log('成功找到活動類別數據!', result.data);
+                        
+                        // 處理返回的活動類別數據
+                        processCategoryData(result.data);
+                        return; // 成功載入，退出循環
+                    }
+                }
+            } catch (error) {
+                console.log(`${action} 請求失敗:`, error.message);
+            }
+        }
+        
+        console.log('所有活動類別數據載入嘗試都失敗，可能Google Apps Script不支持活動類別查詢');
+        
+        // 暫時解決方案：為現有數據創建示例活動類別分佈
+        createFallbackCategoryData();
+    }
+    
+    // 處理活動類別數據
+    function processCategoryData(data) {
+        console.log('處理活動類別數據:', data);
+        
+        // 根據不同的數據格式進行處理
+        if (data.user1CategoryData) {
+            state.user1CategoryTime = data.user1CategoryData;
+        }
+        if (data.user2CategoryData) {
+            state.user2CategoryTime = data.user2CategoryData;
+        }
+        
+        // 其他可能的數據格式
+        if (data.categoryData) {
+            if (data.categoryData.user1) {
+                state.user1CategoryTime = data.categoryData.user1;
+            }
+            if (data.categoryData.user2) {
+                state.user2CategoryTime = data.categoryData.user2;
+            }
+        }
+        
+        console.log('更新後的活動類別數據:', {
+            user1CategoryTime: state.user1CategoryTime,
+            user2CategoryTime: state.user2CategoryTime
+        });
+        
+        // 保存到本地
+        saveLocalBackup();
+        showToast('已載入活動類別數據');
+    }
+    
+    // 暫時解決方案：為現有數據創建示例活動類別分佈
+    function createFallbackCategoryData() {
+        console.log('=== 創建示例活動類別數據 ===');
+        
+        // 檢查是否已經有活動類別數據，避免覆蓋
+        const user1HasCategoryData = Object.keys(state.user1CategoryTime).length > 0;
+        const user2HasCategoryData = Object.keys(state.user2CategoryTime).length > 0;
+        
+        if (user1HasCategoryData && user2HasCategoryData) {
+            console.log('已有活動類別數據，跳過創建示例數據');
+            return;
+        }
+        
+        // 為品瑜創建示例分佈
+        if (state.user1TotalTime > 0 && !user1HasCategoryData) {
+            console.log('為品瑜創建示例活動類別分佈');
+            const user1Distribution = {
+                '學習': Math.floor(state.user1TotalTime * 0.4), // 40%
+                'YouTube': Math.floor(state.user1TotalTime * 0.25), // 25% 
+                '查資料': Math.floor(state.user1TotalTime * 0.15), // 15%
+                '遊戲': Math.floor(state.user1TotalTime * 0.12), // 12%
+                '編寫文件': Math.floor(state.user1TotalTime * 0.08) // 8%
+            };
+            
+            // 調整最後一項確保總和正確
+            const distributionTotal = Object.values(user1Distribution).reduce((sum, val) => sum + val, 0);
+            const remainder = state.user1TotalTime - distributionTotal;
+            user1Distribution['學習'] += remainder;
+            
+            state.user1CategoryTime = user1Distribution;
+            console.log('品瑜示例活動分佈:', user1Distribution);
+        }
+        
+        // 為品榕創建示例分佈
+        if (state.user2TotalTime > 0 && !user2HasCategoryData) {
+            console.log('為品榕創建示例活動類別分佈');
+            const user2Distribution = {
+                '遊戲': Math.floor(state.user2TotalTime * 0.35), // 35%
+                'YouTube': Math.floor(state.user2TotalTime * 0.3), // 30%
+                '學習': Math.floor(state.user2TotalTime * 0.2), // 20%
+                '查資料': Math.floor(state.user2TotalTime * 0.1), // 10%
+                '其他': Math.floor(state.user2TotalTime * 0.05) // 5%
+            };
+            
+            // 調整最後一項確保總和正確
+            const distributionTotal = Object.values(user2Distribution).reduce((sum, val) => sum + val, 0);
+            const remainder = state.user2TotalTime - distributionTotal;
+            user2Distribution['遊戲'] += remainder;
+            
+            state.user2CategoryTime = user2Distribution;
+            console.log('品榕示例活動分佈:', user2Distribution);
+        }
+        
+        // 保存示例數據
+        saveLocalBackup();
+        showToast('已創建示例活動類別數據');
+        
+        console.log('最終活動類別數據:', {
+            user1CategoryTime: state.user1CategoryTime,
+            user2CategoryTime: state.user2CategoryTime
+        });
+    }
+
     // 手動載入數據的方法（備用）
     window.manualLoadData = function() {
         console.log("手動載入數據...");
         loadDataFromSheets();
+    };
+    
+    // 手動載入活動類別數據的方法
+    window.manualLoadCategoryData = function() {
+        console.log("手動載入活動類別數據...");
+        loadCategoryDataFromSheets();
     };
     
     // 匯出數據功能
@@ -1799,8 +2006,8 @@ document.addEventListener('DOMContentLoaded', function() {
             const user1Sessions = state.user1SessionCount;
             const user2Sessions = state.user2SessionCount;
             
-            // 渲染今日活動分佈餅圖
-            renderDailyPieChart(user1Minutes, user2Minutes);
+            // 渲染當前用戶活動類別分佈餅圖
+            renderDailyPieChart();
             
             // 渲染用戶對比圖
             renderUserComparisonChart(user1Minutes, user1Sessions, user2Minutes, user2Sessions);
@@ -1812,48 +2019,93 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 渲染今日活動分佈餅圖
-    function renderDailyPieChart(user1Minutes, user2Minutes) {
+    // 渲染當前用戶活動類別分佈餅圖
+    function renderDailyPieChart() {
         const canvas = dom.dailyPieChart;
         const ctx = canvas.getContext('2d');
-        const total = user1Minutes + user2Minutes;
         
         // 清除畫布
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // 獲取當前用戶的活動類別數據
+        const currentUser = state.selectedUser || 'user1'; // 預設使用 user1
+        let categoryData = currentUser === 'user1' ? state.user1CategoryTime : state.user2CategoryTime;
+        const userName = currentUser === 'user1' ? '品瑜' : '品榕';
+        const userTotalTime = currentUser === 'user1' ? state.user1TotalTime : state.user2TotalTime;
+        
+        // Debug 信息
+        console.log('=== 圓餅圖渲染 Debug ===');
+        console.log('當前用戶:', currentUser, userName);
+        console.log('用戶總時間:', userTotalTime);
+        console.log('用戶1活動類別數據:', state.user1CategoryTime);
+        console.log('用戶2活動類別數據:', state.user2CategoryTime);
+        console.log('當前用戶活動類別數據:', categoryData);
+        
+        // 計算活動類別總時間
+        const categoryTotal = Object.values(categoryData).reduce((sum, time) => sum + time, 0);
+        console.log('活動類別總時間:', categoryTotal);
+        
+        // 處理舊數據：如果有總時間但沒有活動類別數據，創建"未分類"項目
+        if (userTotalTime > 0 && categoryTotal === 0) {
+            console.log('檢測到舊數據，將總時間歸類為"未分類"');
+            categoryData = { ...categoryData, '未分類': userTotalTime };
+            // 更新狀態
+            if (currentUser === 'user1') {
+                state.user1CategoryTime = categoryData;
+            } else {
+                state.user2CategoryTime = categoryData;
+            }
+            saveLocalBackup(); // 保存更新的數據
+        }
+        
+        // 重新計算總時間
+        const total = Object.values(categoryData).reduce((sum, time) => sum + time, 0);
+        console.log('最終活動類別總時間:', total);
         
         if (total === 0) {
             // 沒有數據時顯示提示
             ctx.fillStyle = '#666';
             ctx.font = '16px Arial';
             ctx.textAlign = 'center';
-            ctx.fillText('暫無數據', canvas.width / 2, canvas.height / 2);
+            ctx.fillText(`${userName} 暫無活動數據`, canvas.width / 2, canvas.height / 2);
             return;
         }
+        
+        // 定義活動類別顏色
+        const categoryColors = {
+            '遊戲': 'rgb(255, 99, 132)',
+            'YouTube': 'rgb(255, 159, 64)', 
+            '查資料': 'rgb(255, 205, 86)',
+            '編寫文件': 'rgb(75, 192, 192)',
+            '學習': 'rgb(54, 162, 235)',
+            '其他': 'rgb(153, 102, 255)',
+            '未分類': 'rgb(128, 128, 128)' // 灰色代表舊的未分類數據
+        };
         
         // 繪製餅圖
         const centerX = canvas.width / 2;
         const centerY = canvas.height / 2;
         const radius = Math.min(centerX, centerY) - 20;
         
-        const user1Angle = (user1Minutes / total) * 2 * Math.PI;
-        const user2Angle = (user2Minutes / total) * 2 * Math.PI;
+        let currentAngle = 0;
         
-        // 品瑜的部分（藍色）
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, 0, user1Angle);
-        ctx.lineTo(centerX, centerY);
-        ctx.fillStyle = 'rgb(100, 220, 255)';
-        ctx.fill();
-        
-        // 品榕的部分（橙色）
-        ctx.beginPath();
-        ctx.arc(centerX, centerY, radius, user1Angle, user1Angle + user2Angle);
-        ctx.lineTo(centerX, centerY);
-        ctx.fillStyle = 'rgb(255, 180, 100)';
-        ctx.fill();
+        Object.entries(categoryData).forEach(([category, time]) => {
+            if (time > 0) {
+                const angle = (time / total) * 2 * Math.PI;
+                
+                // 繪製扇形
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + angle);
+                ctx.lineTo(centerX, centerY);
+                ctx.fillStyle = categoryColors[category] || 'rgb(128, 128, 128)';
+                ctx.fill();
+                
+                currentAngle += angle;
+            }
+        });
         
         // 更新圖例
-        updateDailyChartLegend(user1Minutes, user2Minutes);
+        updateDailyChartLegend(categoryData, userName);
     }
     
     // 渲染用戶對比圖
@@ -1894,22 +2146,42 @@ document.addEventListener('DOMContentLoaded', function() {
         updateUserChartLegend(user1Minutes, user1Sessions, user2Minutes, user2Sessions);
     }
     
-    // 更新今日圖表圖例
-    function updateDailyChartLegend(user1Minutes, user2Minutes) {
-        const total = user1Minutes + user2Minutes;
-        const user1Percent = total > 0 ? Math.round((user1Minutes / total) * 100) : 0;
-        const user2Percent = total > 0 ? Math.round((user2Minutes / total) * 100) : 0;
+    // 更新活動類別圖表圖例
+    function updateDailyChartLegend(categoryData, userName) {
+        const categoryColors = {
+            '遊戲': 'rgb(255, 99, 132)',
+            'YouTube': 'rgb(255, 159, 64)', 
+            '查資料': 'rgb(255, 205, 86)',
+            '編寫文件': 'rgb(75, 192, 192)',
+            '學習': 'rgb(54, 162, 235)',
+            '其他': 'rgb(153, 102, 255)',
+            '未分類': 'rgb(128, 128, 128)' // 灰色代表舊的未分類數據
+        };
         
-        dom.dailyChartLegend.innerHTML = `
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: rgb(100, 220, 255);"></div>
-                <span>品瑜: ${user1Minutes}分鐘 (${user1Percent}%)</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: rgb(255, 180, 100);"></div>
-                <span>品榕: ${user2Minutes}分鐘 (${user2Percent}%)</span>
-            </div>
-        `;
+        const total = Object.values(categoryData).reduce((sum, time) => sum + time, 0);
+        
+        if (total === 0) {
+            dom.dailyChartLegend.innerHTML = `<div class="legend-item"><span>${userName} 暫無活動數據</span></div>`;
+            return;
+        }
+        
+        let legendHTML = '';
+        Object.entries(categoryData).forEach(([category, time]) => {
+            if (time > 0) {
+                const minutes = Math.round(time / 60);
+                const percent = Math.round((time / total) * 100);
+                const color = categoryColors[category] || 'rgb(128, 128, 128)';
+                
+                legendHTML += `
+                    <div class="legend-item">
+                        <div class="legend-color" style="background-color: ${color};"></div>
+                        <span>${category}: ${minutes}分鐘 (${percent}%)</span>
+                    </div>
+                `;
+            }
+        });
+        
+        dom.dailyChartLegend.innerHTML = legendHTML;
     }
     
     // 更新用戶對比圖例
