@@ -529,8 +529,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const endTimestamp = new Date();
             
-            // 記錄計時完成時間（用於冷卻期計算）
-            state.lastCompletionTime = Date.now();
+            // 不在此處記錄冷卻時間，等用戶手動停止警報時再記錄
             
             if (state.selectedUser === 'user1') {
                 state.user1TotalTime += state.totalDuration;
@@ -570,9 +569,6 @@ document.addEventListener('DOMContentLoaded', function() {
             }
             
             showToast('時間到! 🎉');
-            
-            // 啟動冷卻期更新定時器
-            startCooldownUpdate();
             
             setTimeout(() => {
                 dom.completedAnimation.style.display = 'none';
@@ -690,17 +686,30 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // 設定1分鐘後自動停止警報
                 const alarmTimeout = setTimeout(() => {
-                    stopAlarmSound();
+                    // 自動停止警報（不觸發冷卻期）
+                    if (state.alarmAudio) {
+                        if (state.alarmAudio.context) {
+                            state.alarmAudio.context.close();
+                        }
+                        if (state.alarmAudio.interval) {
+                            clearInterval(state.alarmAudio.interval);
+                        }
+                        state.alarmAudio = null;
+                    }
+                    state.alarmTimeout = null;
+                    
                     // 如果警報循環激活，30秒後重新啟動警報
                     if (state.alarmCycleActive) {
                         showToast('警報音效已停止，30秒後將重新提醒');
                         state.alarmCycleTimeout = setTimeout(() => {
                             if (state.alarmCycleActive) {
+                                console.log('循環警報重新啟動');
                                 playSound('complete');
                             }
                         }, 30000); // 30秒後重新啟動
                     } else {
                         showToast('警報音效已自動停止');
+                        hideAlarmStopButton();
                     }
                 }, 60000); // 60秒 = 1分鐘
 
@@ -769,6 +778,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (state.alarmCycleTimeout) {
             clearTimeout(state.alarmCycleTimeout);
             state.alarmCycleTimeout = null;
+        }
+        
+        // 記錄手動停止警報的時間（用於冷卻期計算）
+        if (state.alarmCycleActive || state.alarmAudio) {
+            state.lastCompletionTime = Date.now();
+            console.log('手動停止警報，開始冷卻期');
+            // 啟動冷卻期更新定時器
+            startCooldownUpdate();
         }
         
         // 停止警報循環
