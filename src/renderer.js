@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM loaded, starting app initialization...');
+    
     // 更新為新的Google Apps Script Web App URL
     const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxZOZNixqmMai8690QgbuitEQKk2hZGTU4O_YFlRw_NeO2A3FfmZg5WycWwCIb8BCkf0Q/exec';
     
@@ -92,10 +94,16 @@ document.addEventListener('DOMContentLoaded', function() {
     ];
     
     // 初始化
+    console.log('開始初始化...');
     loadLocalBackup();
     updateStatsDisplay();
     initializeTheme();
-    initializeUserSelection();
+    
+    // 延遲執行用戶選擇初始化，確保DOM完全載入
+    setTimeout(() => {
+        console.log('開始初始化用戶選擇...');
+        initializeUserSelection();
+    }, 100);
     
     // 延遲載入雲端數據，讓本地數據先顯示
     setTimeout(() => {
@@ -254,68 +262,68 @@ document.addEventListener('DOMContentLoaded', function() {
     // 舊的用戶選擇按鈕已移除，現在使用啟動時選擇 + 記憶功能
     
     // 重新整理按鈕
-    refreshBtn.addEventListener('click', function(e) {
+    dom.refreshBtn.addEventListener('click', function(e) {
         e.preventDefault();
         e.stopPropagation();
         
         console.log("重新載入按鈕被點擊");
         
-        refreshBtn.style.transform = 'rotate(360deg)';
-        refreshBtn.style.transition = 'transform 1s ease';
+        dom.refreshBtn.style.transform = 'rotate(360deg)';
+        dom.refreshBtn.style.transition = 'transform 1s ease';
         updateSyncStatus('重新載入中...', true);
         
         // 強制從Google Sheets重新載入數據
         loadDataFromSheets();
         
         setTimeout(() => {
-            refreshBtn.style.transform = '';
+            dom.refreshBtn.style.transform = '';
         }, 1000);
     });
     
     // 匯出按鈕事件
-    exportBtn.addEventListener('click', function(e) {
+    dom.exportBtn.addEventListener('click', function(e) {
         console.log('Export button clicked!');
         e.preventDefault();
         e.stopPropagation();
-        exportModal.classList.remove('hidden');
+        dom.exportModal.classList.remove('hidden');
     });
     
     // 關閉模態對話框
-    modalClose.addEventListener('click', function() {
+    dom.modalClose.addEventListener('click', function() {
         console.log('Modal close button clicked!');
-        exportModal.classList.add('hidden');
+        dom.exportModal.classList.add('hidden');
     });
     
     // 點擊模態背景關閉
-    exportModal.addEventListener('click', function(e) {
-        if (e.target === exportModal) {
+    dom.exportModal.addEventListener('click', function(e) {
+        if (e.target === dom.exportModal) {
             console.log('Modal background clicked!');
-            exportModal.classList.add('hidden');
+            dom.exportModal.classList.add('hidden');
         }
     });
     
     // CSV 匯出
-    exportCsvBtn.addEventListener('click', function() {
+    dom.exportCsvBtn.addEventListener('click', function() {
         console.log('Export CSV button clicked!');
         const range = document.querySelector('input[name="export-range"]:checked').value;
         exportData('csv', range);
-        exportModal.classList.add('hidden');
+        dom.exportModal.classList.add('hidden');
     });
     
     // JSON 匯出
-    exportJsonBtn.addEventListener('click', function() {
+    dom.exportJsonBtn.addEventListener('click', function() {
         console.log('Export JSON button clicked!');
         const range = document.querySelector('input[name="export-range"]:checked').value;
         exportData('json', range);
-        exportModal.classList.add('hidden');
+        dom.exportModal.classList.add('hidden');
     });
     
     // 圖表按鈕事件
-    chartsBtn.addEventListener('click', function(e) {
+    dom.chartsBtn.addEventListener('click', function(e) {
         console.log('Charts button clicked!');
         e.preventDefault();
         e.stopPropagation();
-        chartsModal.classList.remove('hidden');
+        dom.chartsModal.classList.remove('hidden');
         // 延遲渲染圖表以確保模態對話框已顯示
         setTimeout(() => {
             renderCharts();
@@ -323,21 +331,21 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 關閉圖表模態對話框
-    chartsModalClose.addEventListener('click', function() {
+    dom.chartsModalClose.addEventListener('click', function() {
         console.log('Charts modal close button clicked!');
-        chartsModal.classList.add('hidden');
+        dom.chartsModal.classList.add('hidden');
     });
     
     // 點擊圖表模態背景關閉
-    chartsModal.addEventListener('click', function(e) {
-        if (e.target === chartsModal) {
+    dom.chartsModal.addEventListener('click', function(e) {
+        if (e.target === dom.chartsModal) {
             console.log('Charts modal background clicked!');
-            chartsModal.classList.add('hidden');
+            dom.chartsModal.classList.add('hidden');
         }
     });
     
     // 主題切換按鈕事件
-    themeToggle.addEventListener('click', function(e) {
+    dom.themeToggle.addEventListener('click', function(e) {
         console.log('Theme toggle button clicked!');
         e.preventDefault();
         e.stopPropagation();
@@ -1358,20 +1366,34 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 初始化用戶選擇
     function initializeUserSelection() {
+        console.log('=== 初始化用戶選擇功能 ===');
+        
+        // 檢查DOM元素
+        console.log('檢查DOM元素:');
+        console.log('userSelectionOverlay:', !!dom.userSelectionOverlay);
+        console.log('selectUser1Btn:', !!dom.selectUser1Btn);
+        console.log('selectUser2Btn:', !!dom.selectUser2Btn);
+        console.log('userSettingsBtn:', !!dom.userSettingsBtn);
+        console.log('currentUserName:', !!dom.currentUserName);
+        
         // 檢查是否有記住的用戶
         const rememberedUser = localStorage.getItem('rememberedUser');
+        console.log('記住的用戶:', rememberedUser);
         
         if (rememberedUser) {
             // 如果有記住的用戶，直接設置並隱藏選擇界面
+            console.log('設置記住的用戶:', rememberedUser);
             setSelectedUser(rememberedUser);
             hideUserSelection();
         } else {
             // 沒有記住的用戶，顯示選擇界面
+            console.log('顯示用戶選擇界面');
             showUserSelection();
         }
         
         // 綁定事件監聽器
         setupUserSelectionEvents();
+        console.log('用戶選擇初始化完成');
     }
     
     // 顯示用戶選擇界面
@@ -1386,25 +1408,50 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 設置選中的用戶
     function setSelectedUser(user) {
+        console.log('=== 設置用戶 ===');
+        console.log('用戶ID:', user);
+        
         state.selectedUser = user;
         const userName = user === 'user1' ? '品瑜' : '品榕';
+        console.log('用戶名稱:', userName);
         
         // 更新當前用戶顯示
-        dom.currentUserName.textContent = userName;
+        if (dom.currentUserName) {
+            dom.currentUserName.textContent = userName;
+            console.log('更新當前用戶顯示:', userName);
+        } else {
+            console.error('currentUserName 元素不存在');
+        }
         
         // 更新用戶顯示區域
-        dom.userDisplay.textContent = userName;
-        dom.userDisplay.className = `user-display ${user}-color`;
+        if (dom.userDisplay) {
+            dom.userDisplay.textContent = userName;
+            dom.userDisplay.className = `user-display ${user}-color`;
+            console.log('更新用戶顯示區域');
+        } else {
+            console.error('userDisplay 元素不存在');
+        }
         
         // 更新進度條顏色
-        const computedStyle = getComputedStyle(document.documentElement);
-        const userColor = computedStyle.getPropertyValue(`--${user}-color`).trim();
-        dom.progressBar.setAttribute('stroke', userColor);
+        if (dom.progressBar) {
+            const computedStyle = getComputedStyle(document.documentElement);
+            const userColor = computedStyle.getPropertyValue(`--${user}-color`).trim();
+            dom.progressBar.setAttribute('stroke', userColor);
+            console.log('更新進度條顏色:', userColor);
+        } else {
+            console.error('progressBar 元素不存在');
+        }
         
         // 檢查開始按鈕狀態
+        console.log('當前狀態:', {
+            selectedUser: state.selectedUser,
+            selectedCategory: state.selectedCategory,
+            totalDuration: state.totalDuration,
+            isRunning: state.isRunning
+        });
         checkStartButtonState();
         
-        console.log('用戶設置為:', userName);
+        console.log('用戶設置完成:', userName);
     }
     
     // 設置用戶選擇事件監聽器
@@ -1424,9 +1471,13 @@ document.addEventListener('DOMContentLoaded', function() {
         
         // 用戶設定按鈕（重新選擇用戶）
         if (dom.userSettingsBtn) {
+            console.log('🔧 用戶設定按鈕找到，綁定點擊事件');
             dom.userSettingsBtn.addEventListener('click', () => {
+                console.log('👤 用戶設定按鈕被點擊');
                 showUserSelection();
             });
+        } else {
+            console.log('❌ 用戶設定按鈕未找到');
         }
     }
     
