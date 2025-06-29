@@ -77,6 +77,11 @@ document.addEventListener('DOMContentLoaded', function() {
         isDarkMode: false,
         alarmAudio: null, // 用於追蹤警報音效
         alarmTimeout: null, // 用於自動停止1分鐘警報
+        lastCompletionTime: null, // 上次計時完成的時間
+        cooldownDuration: 5 * 60 * 1000, // 5分鐘冷卻期（毫秒）
+        cooldownUpdateInterval: null, // 冷卻期更新定時器
+        alarmCycleTimeout: null, // 警報循環定時器
+        alarmCycleActive: false, // 警報循環是否激活
     };
     
     // 進度條設定
@@ -181,12 +186,34 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 檢查開始按鈕狀態
     function checkStartButtonState() {
-        if (state.selectedUser && state.selectedCategory && state.totalDuration > 0 && !state.isRunning) {
+        // 檢查基本條件
+        const basicConditionsMet = state.selectedUser && state.selectedCategory && state.totalDuration > 0 && !state.isRunning;
+        
+        // 檢查冷卻期
+        let cooldownMet = true;
+        let remainingCooldown = 0;
+        
+        if (state.lastCompletionTime) {
+            const timeSinceCompletion = Date.now() - state.lastCompletionTime;
+            cooldownMet = timeSinceCompletion >= state.cooldownDuration;
+            remainingCooldown = Math.max(0, state.cooldownDuration - timeSinceCompletion);
+        }
+        
+        if (basicConditionsMet && cooldownMet) {
             dom.startBtn.disabled = false;
             dom.startBtn.classList.add('active');
+            dom.startBtn.textContent = '開始';
         } else {
             dom.startBtn.disabled = true;
             dom.startBtn.classList.remove('active');
+            
+            // 如果是冷卻期限制，顯示剩餘時間
+            if (basicConditionsMet && !cooldownMet) {
+                const minutes = Math.ceil(remainingCooldown / (60 * 1000));
+                dom.startBtn.textContent = `冷卻中 (${minutes}分鐘)`;
+            } else {
+                dom.startBtn.textContent = '開始';
+            }
         }
     }
     
@@ -502,6 +529,9 @@ document.addEventListener('DOMContentLoaded', function() {
             
             const endTimestamp = new Date();
             
+            // 記錄計時完成時間（用於冷卻期計算）
+            state.lastCompletionTime = Date.now();
+            
             if (state.selectedUser === 'user1') {
                 state.user1TotalTime += state.totalDuration;
                 state.user1SessionCount++;
@@ -528,13 +558,21 @@ document.addEventListener('DOMContentLoaded', function() {
             dom.pauseBtn.disabled = true;
             dom.resetBtn.disabled = false;
             
+            // 通知主進程將窗口置頂
+            window.api.send('timer-completed-show-window');
+            
             playCompletionEffect();
             
             if (state.soundEnabled) {
+                // 激活警報循環
+                state.alarmCycleActive = true;
                 playSound('complete');
             }
             
             showToast('時間到! 🎉');
+            
+            // 啟動冷卻期更新定時器
+            startCooldownUpdate();
             
             setTimeout(() => {
                 dom.completedAnimation.style.display = 'none';
@@ -653,7 +691,17 @@ document.addEventListener('DOMContentLoaded', function() {
                 // 設定1分鐘後自動停止警報
                 const alarmTimeout = setTimeout(() => {
                     stopAlarmSound();
-                    showToast('警報音效已自動停止');
+                    // 如果警報循環激活，30秒後重新啟動警報
+                    if (state.alarmCycleActive) {
+                        showToast('警報音效已停止，30秒後將重新提醒');
+                        state.alarmCycleTimeout = setTimeout(() => {
+                            if (state.alarmCycleActive) {
+                                playSound('complete');
+                            }
+                        }, 30000); // 30秒後重新啟動
+                    } else {
+                        showToast('警報音效已自動停止');
+                    }
                 }, 60000); // 60秒 = 1分鐘
 
                 // 將音訊上下文、計時器和自動停止計時器存儲起來
@@ -716,6 +764,15 @@ document.addEventListener('DOMContentLoaded', function() {
             clearTimeout(state.alarmTimeout);
             state.alarmTimeout = null;
         }
+        
+        // 清除循環警報計時器
+        if (state.alarmCycleTimeout) {
+            clearTimeout(state.alarmCycleTimeout);
+            state.alarmCycleTimeout = null;
+        }
+        
+        // 停止警報循環
+        state.alarmCycleActive = false;
         
         // 隱藏停止警報按鈕
         hideAlarmStopButton();
@@ -1502,6 +1559,34 @@ document.addEventListener('DOMContentLoaded', function() {
         state.selectedUser = null;
         dom.currentUserName.textContent = '未選擇';
         showUserSelection();
+    }
+    
+    // 啟動冷卻期更新定時器
+    function startCooldownUpdate() {
+        // 清除可能存在的舊定時器
+        if (state.cooldownUpdateInterval) {
+            clearInterval(state.cooldownUpdateInterval);
+        }
+        
+        // 每秒更新一次按鈕狀態
+        state.cooldownUpdateInterval = setInterval(() => {
+            if (state.lastCompletionTime) {
+                const timeSinceCompletion = Date.now() - state.lastCompletionTime;
+                
+                if (timeSinceCompletion >= state.cooldownDuration) {
+                    // 冷卻期結束，清除定時器
+                    clearInterval(state.cooldownUpdateInterval);
+                    state.cooldownUpdateInterval = null;
+                    console.log('冷卻期結束');
+                    showToast('可以重新開始計時了！');
+                }
+                
+                // 更新按鈕狀態
+                checkStartButtonState();
+            }
+        }, 1000);
+        
+        console.log('冷卻期更新定時器已啟動');
     }
     
     // 暴露給全局使用（調試用）

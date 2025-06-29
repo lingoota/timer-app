@@ -485,4 +485,32 @@ function setupIpcHandlers() {
       mainWindow.setTitle(`${user} - ${timeString}`);
     }
   });
+
+  // 計時結束時將窗口置頂
+  ipcMain.on('timer-completed-show-window', (event) => {
+    console.log('收到計時完成通知，將窗口置頂');
+    
+    if (mainWindow) {
+      // 如果在迷你模式，先恢復正常模式
+      if (isMinimized) {
+        console.log('從迷你模式恢復並置頂');
+        restoreFromMiniMode();
+      }
+      
+      // 顯示窗口並置頂
+      mainWindow.show();
+      mainWindow.focus();
+      mainWindow.setAlwaysOnTop(true);
+      
+      // 5秒後取消置頂狀態，避免永久置頂
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.setAlwaysOnTop(false);
+          console.log('取消窗口置頂狀態');
+        }
+      }, 5000);
+      
+      console.log('窗口已置頂並獲得焦點');
+    }
+  });
 }
