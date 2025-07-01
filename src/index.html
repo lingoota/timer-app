@@ -90,7 +90,7 @@
                 <button class="category-btn" data-category="遊戲">🎮 遊戲</button>
                 <button class="category-btn" data-category="YouTube">📺 YouTube</button>
                 <button class="category-btn" data-category="查資料">🔍 查資料</button>
-                <button class="category-btn" data-category="編寫文件">📝 編寫文件</button>
+                <button class="category-btn" data-category="看漫畫">📚 看漫畫</button>
                 <button class="category-btn" data-category="學習">📚 學習</button>
                 <button class="category-btn" data-category="其他">⭐ 其他</button>
             </div>
@@ -105,6 +105,16 @@
                 <button class="time-btn" data-minutes="15">15分鐘</button>
                 <button class="time-btn" data-minutes="20">20分鐘</button>
                 <button class="time-btn" data-minutes="30">30分鐘</button>
+                <button class="time-btn custom-time-btn" data-minutes="custom">其他</button>
+            </div>
+            <!-- 自定義時間輸入 -->
+            <div class="custom-time-input hidden" id="custom-time-input">
+                <div class="custom-input-wrapper">
+                    <input type="number" id="custom-minutes" min="1" max="30" placeholder="輸入分鐘數">
+                    <span class="input-unit">分鐘</span>
+                    <button id="confirm-custom-time" class="confirm-btn">確認</button>
+                </div>
+                <div class="input-hint">請輸入 1-30 之間的數字</div>
             </div>
         </div>
         

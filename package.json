@@ -1,6 +1,6 @@
 {
   "name": "time-calculator",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "電腦使用時間追蹤應用程式",
   "main": "main.js",
   "scripts": {
@@ -45,7 +45,16 @@
         }
       ],
       "sign": false,
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "certificateFile": null,
+      "certificatePassword": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "portable": {
+      "artifactName": "${productName} ${version}.${ext}"
     }
   },
   "dependencies": {

@@ -29,6 +29,10 @@ document.addEventListener('DOMContentLoaded', function() {
         sandAnimation: document.getElementById('sand-animation'),
         completedAnimation: document.getElementById('completed-animation'),
         timeButtons: document.querySelectorAll('.time-btn'),
+        customTimeInput: document.getElementById('custom-time-input'),
+        customMinutesInput: document.getElementById('custom-minutes'),
+        confirmCustomTimeBtn: document.getElementById('confirm-custom-time'),
+        customTimeBtn: document.querySelector('.custom-time-btn'),
         syncStatus: document.getElementById('sync-status'),
         toast: document.getElementById('toast'),
         refreshBtn: document.getElementById('refresh-btn'),
@@ -194,6 +198,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
+    // 驗證自定義時間輸入
+    function validateCustomTime(minutes) {
+        if (isNaN(minutes) || minutes === null || minutes === undefined) {
+            showToast('請輸入有效的數字');
+            return false;
+        }
+        
+        if (minutes < 1) {
+            showToast('時間不能少於1分鐘');
+            return false;
+        }
+        
+        if (minutes > 30) {
+            showToast('時間不能超過30分鐘');
+            return false;
+        }
+        
+        return true;
+    }
+    
     // 檢查開始按鈕狀態
     function checkStartButtonState() {
         // 檢查基本條件
@@ -281,11 +305,25 @@ document.addEventListener('DOMContentLoaded', function() {
                 dom.timeButtons.forEach(b => b.classList.remove('active'));
                 this.classList.add('active');
                 
-                const minutes = parseInt(this.dataset.minutes);
-                state.totalDuration = minutes * 60;
-                state.timeLeft = state.totalDuration;
-                updateDisplay();
-                updateProgressBar();
+                const minutesData = this.dataset.minutes;
+                
+                if (minutesData === 'custom') {
+                    // 顯示自定義時間輸入框
+                    dom.customTimeInput.classList.remove('hidden');
+                    dom.customMinutesInput.focus();
+                    // 重置計時器狀態，等待用戶輸入
+                    state.totalDuration = 0;
+                    state.timeLeft = 0;
+                } else {
+                    // 隱藏自定義時間輸入框
+                    dom.customTimeInput.classList.add('hidden');
+                    
+                    const minutes = parseInt(minutesData);
+                    state.totalDuration = minutes * 60;
+                    state.timeLeft = state.totalDuration;
+                    updateDisplay();
+                    updateProgressBar();
+                }
                 
                 checkStartButtonState();
                 
@@ -294,6 +332,40 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             }
         });
+    });
+    
+    // 自定義時間確認按鈕
+    dom.confirmCustomTimeBtn.addEventListener('click', function() {
+        const customMinutes = parseInt(dom.customMinutesInput.value);
+        
+        if (validateCustomTime(customMinutes)) {
+            state.totalDuration = customMinutes * 60;
+            state.timeLeft = state.totalDuration;
+            updateDisplay();
+            updateProgressBar();
+            
+            // 隱藏輸入框
+            dom.customTimeInput.classList.add('hidden');
+            
+            // 更新「其他」按鈕顯示
+            dom.customTimeBtn.textContent = `其他 (${customMinutes}分)`;
+            
+            checkStartButtonState();
+            showToast(`已設定 ${customMinutes} 分鐘`);
+        }
+    });
+    
+    // 自定義時間輸入框 Enter 鍵支持
+    dom.customMinutesInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            dom.confirmCustomTimeBtn.click();
+        }
+    });
+    
+    // 自定義時間輸入框失去焦點時的處理
+    dom.customMinutesInput.addEventListener('blur', function() {
+        // 如果用戶點擊了其他地方，可以選擇隱藏輸入框或保持顯示
+        // 這裡我們選擇保持顯示，讓用戶有機會重新輸入
     });
     
     // 舊的用戶選擇按鈕已移除，現在使用啟動時選擇 + 記憶功能
@@ -1200,7 +1272,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 'YouTube': Math.floor(state.user1TotalTime * 0.25), // 25% 
                 '查資料': Math.floor(state.user1TotalTime * 0.15), // 15%
                 '遊戲': Math.floor(state.user1TotalTime * 0.12), // 12%
-                '編寫文件': Math.floor(state.user1TotalTime * 0.08) // 8%
+                '看漫畫': Math.floor(state.user1TotalTime * 0.08) // 8%
             };
             
             // 調整最後一項確保總和正確
@@ -2076,7 +2148,7 @@ document.addEventListener('DOMContentLoaded', function() {
             '遊戲': 'rgb(255, 99, 132)',
             'YouTube': 'rgb(255, 159, 64)', 
             '查資料': 'rgb(255, 205, 86)',
-            '編寫文件': 'rgb(75, 192, 192)',
+            '看漫畫': 'rgb(75, 192, 192)',
             '學習': 'rgb(54, 162, 235)',
             '其他': 'rgb(153, 102, 255)',
             '未分類': 'rgb(128, 128, 128)' // 灰色代表舊的未分類數據
@@ -2152,7 +2224,7 @@ document.addEventListener('DOMContentLoaded', function() {
             '遊戲': 'rgb(255, 99, 132)',
             'YouTube': 'rgb(255, 159, 64)', 
             '查資料': 'rgb(255, 205, 86)',
-            '編寫文件': 'rgb(75, 192, 192)',
+            '看漫畫': 'rgb(75, 192, 192)',
             '學習': 'rgb(54, 162, 235)',
             '其他': 'rgb(153, 102, 255)',
             '未分類': 'rgb(128, 128, 128)' // 灰色代表舊的未分類數據

@@ -193,6 +193,90 @@ body.mini-mode-active {
     transform: scale(1.1);
 }
 
+/* 自定義時間輸入框 */
+.custom-time-input {
+    margin-top: 15px;
+    padding: 20px;
+    background: var(--bg-overlay);
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+}
+
+.custom-time-input.hidden {
+    display: none;
+}
+
+.custom-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    justify-content: center;
+    margin-bottom: 10px;
+}
+
+#custom-minutes {
+    background: var(--bg-overlay-hover);
+    border: 1px solid var(--border-color);
+    border-radius: 15px;
+    padding: 10px 15px;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 500;
+    width: 80px;
+    text-align: center;
+    transition: all 0.3s ease;
+}
+
+#custom-minutes:focus {
+    outline: none;
+    border-color: rgba(255, 255, 255, 0.4);
+    background: var(--bg-overlay-active);
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+#custom-minutes::placeholder {
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.input-unit {
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    margin-left: -5px;
+}
+
+.confirm-btn {
+    background: var(--bg-overlay-hover);
+    border: 1px solid var(--border-color);
+    border-radius: 15px;
+    padding: 10px 20px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.confirm-btn:hover {
+    background: var(--bg-overlay-active);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-color);
+}
+
+.confirm-btn:active {
+    transform: scale(0.95);
+}
+
+.input-hint {
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 12px;
+    opacity: 0.8;
+}
+
 .timer-circle {
     width: 250px;
     height: 250px;
