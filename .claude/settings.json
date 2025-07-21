@@ -1,0 +1,54 @@
+{
+  "description": "時間追蹤器專案 - Claude Code 專案設定",
+  "language": "zh-TW",
+  "environment": {
+    "os": "Windows 11",
+    "subsystem": "WSL",
+    "editor": "VS Code",
+    "node_version": "請檢查當前版本",
+    "electron_version": "^27.0.0"
+  },
+  "project": {
+    "name": "時間追蹤器",
+    "version": "1.5.0",
+    "type": "Electron App",
+    "main_language": "JavaScript",
+    "ui_framework": "HTML/CSS/JS",
+    "build_tool": "electron-builder"
+  },
+  "developer": {
+    "experience_level": "新手",
+    "coding_background": "無程式經驗，但有邏輯基礎",
+    "learning_goal": "vibe coding",
+    "preferred_explanation": "詳細中文說明"
+  },
+  "tools_enabled": {
+    "TodoRead": true,
+    "TodoWrite": true,
+    "Git": true,
+    "FileOperations": true,
+    "CodeExecution": true,
+    "WebSearch": false
+  },
+  "communication": {
+    "language": "zh-TW",
+    "explain_concepts": true,
+    "add_comments": true,
+    "step_by_step": true,
+    "beginner_friendly": true
+  },
+  "workflow": {
+    "auto_git_operations": true,
+    "default_branch": "main",
+    "commit_language": "zh-TW",
+    "require_confirmation": false,
+    "update_docs": true
+  },
+  "custom_commands": {
+    "continue": "/繼續",
+    "status": "/狀態", 
+    "complete": "/完成",
+    "pause": "/暫停",
+    "push": "/推送"
+  }
+}

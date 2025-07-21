@@ -47,7 +47,9 @@
       "sign": false,
       "verifyUpdateCodeSignature": false,
       "certificateFile": null,
-      "certificatePassword": null
+      "certificatePassword": null,
+      "requestedExecutionLevel": "asInvoker",
+      "forceCodeSigning": false
     },
     "nsis": {
       "oneClick": false,
