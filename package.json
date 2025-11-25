@@ -6,7 +6,7 @@
   "scripts": {
     "start": "electron .",
     "build": "electron-builder --win --x64",
-    "build-portable": "electron-builder --win portable --x64",
+    "build-portable": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win portable --x64",
     "dist": "electron-builder --publish=never",
     "clean": "rimraf dist node_modules/.cache",
     "release": "npm run build && git tag v$npm_package_version",
@@ -36,20 +36,9 @@
       "node_modules/axios/**/*"
     ],
     "win": {
-      "target": [
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
-      ],
-      "sign": false,
-      "verifyUpdateCodeSignature": false,
-      "certificateFile": null,
-      "certificatePassword": null,
-      "requestedExecutionLevel": "asInvoker",
-      "forceCodeSigning": false
+      "target": "dir",
+      "sign": null,
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
@@ -60,6 +49,7 @@
     }
   },
   "dependencies": {
-    "axios": "^1.10.0"
+    "axios": "^1.10.0",
+    "mime-types": "^3.0.1"
   }
 }
