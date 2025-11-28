@@ -1449,89 +1449,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 圖表渲染功能
     function renderCharts() {
+        // 呼叫正確的活動類別圓餅圖渲染函數（定義在後面）
         renderDailyPieChart();
         renderUserComparisonChart();
-    }
-    
-    function renderDailyPieChart() {
-        const canvas = dom.dailyPieChart;
-        const ctx = canvas.getContext('2d');
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const radius = Math.min(centerX, centerY) - 40;
-        
-        // 清除畫布
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // 計算數據
-        const user1Minutes = Math.round(state.user1TotalTime / 60);
-        const user2Minutes = Math.round(state.user2TotalTime / 60);
-        const totalMinutes = user1Minutes + user2Minutes;
-        
-        if (totalMinutes === 0) {
-            // 如果沒有數據，顯示空狀態
-            const computedStyle = getComputedStyle(document.documentElement);
-            const textColor = computedStyle.getPropertyValue('--text-secondary').trim();
-            ctx.fillStyle = textColor;
-            ctx.font = '16px Poppins';
-            ctx.textAlign = 'center';
-            ctx.fillText('今日尚無使用記錄', centerX, centerY);
-            dom.dailyChartLegend.innerHTML = '<div class="legend-item">今日尚無使用記錄</div>';
-            return;
-        }
-        
-        // 計算角度
-        const user1Angle = (user1Minutes / totalMinutes) * 2 * Math.PI;
-        const user2Angle = (user2Minutes / totalMinutes) * 2 * Math.PI;
-        
-        // 顏色 - 使用CSS變數
-        const computedStyle = getComputedStyle(document.documentElement);
-        const user1Color = computedStyle.getPropertyValue('--user1-color').trim();
-        const user2Color = computedStyle.getPropertyValue('--user2-color').trim();
-        
-        let currentAngle = -Math.PI / 2; // 從頂部開始
-        
-        // 繪製品瑜的扇形
-        if (user1Minutes > 0) {
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + user1Angle);
-            ctx.closePath();
-            ctx.fillStyle = user1Color;
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-            currentAngle += user1Angle;
-        }
-        
-        // 繪製品榕的扇形
-        if (user2Minutes > 0) {
-            ctx.beginPath();
-            ctx.moveTo(centerX, centerY);
-            ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + user2Angle);
-            ctx.closePath();
-            ctx.fillStyle = user2Color;
-            ctx.fill();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 2;
-            ctx.stroke();
-        }
-        
-        // 更新圖例
-        const user1Percentage = Math.round((user1Minutes / totalMinutes) * 100);
-        const user2Percentage = Math.round((user2Minutes / totalMinutes) * 100);
-        
-        dom.dailyChartLegend.innerHTML = `
-            <div class="legend-item">
-                <span class="legend-color" style="background-color: ${user1Color}"></span>
-                品瑜: ${user1Minutes}分鐘 (${user1Percentage}%)
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background-color: ${user2Color}"></span>
-                品榕: ${user2Minutes}分鐘 (${user2Percentage}%)
-            </div>
-        `;
     }
     
     function renderUserComparisonChart() {
