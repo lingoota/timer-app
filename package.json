@@ -1,11 +1,11 @@
 {
   "name": "time-calculator",
-  "version": "1.5.2",
+  "version": "2.0.0-beta.1",
   "description": "電腦使用時間追蹤應用程式",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64",
+    "build": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win nsis --x64",
     "build-portable": "set CSC_IDENTITY_AUTO_DISCOVERY=false && electron-builder --win portable --x64",
     "dist": "electron-builder --publish=never",
     "clean": "rimraf dist node_modules/.cache",
@@ -24,7 +24,7 @@
     "electron-builder": "^24.6.4"
   },
   "build": {
-    "appId": "com.example.timecalculator",
+    "appId": "com.lingoota.timecalculator",
     "productName": "時間計算器",
     "directories": {
       "output": "dist"
@@ -36,20 +36,39 @@
       "node_modules/axios/**/*"
     ],
     "win": {
-      "target": "dir",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "sign": null,
-      "verifyUpdateCodeSignature": false
+      "verifyUpdateCodeSignature": false,
+      "publisherName": "Lingoota"
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "時間計算器"
     },
     "portable": {
       "artifactName": "${productName} ${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "lingoota",
+      "repo": "timer-app"
     }
   },
   "dependencies": {
     "axios": "^1.10.0",
+    "electron-updater": "^6.7.3",
+    "firebase": "^12.8.0",
     "mime-types": "^3.0.1"
   }
 }

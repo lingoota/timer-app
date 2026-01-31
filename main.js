@@ -3,7 +3,12 @@ const path = require('path');
 const axios = require('axios');
 
 // 禁用硬體加速以避免 WSL 環境的 GPU 錯誤
-app.disableHardwareAcceleration();
+// 只有在 app 可用時才呼叫
+if (app && typeof app.disableHardwareAcceleration === 'function') {
+  app.disableHardwareAcceleration();
+}
+
+// 自動更新器設定會在 app.whenReady() 之後初始化
 
 // 保持對window對象的全局引用，避免被垃圾回收
 let mainWindow;
@@ -196,12 +201,70 @@ function registerGlobalShortcuts() {
   console.log('全局快捷鍵已註冊');
 }
 
+// 初始化自動更新器（在 app ready 之後）
+function setupAutoUpdater() {
+  const { autoUpdater } = require('electron-updater');
+
+  // 設定自動更新器
+  autoUpdater.autoDownload = false; // 不自動下載，讓使用者確認
+  autoUpdater.autoInstallOnAppQuit = true; // 應用程式關閉時自動安裝
+
+  // 自動更新事件監聽
+  autoUpdater.on('checking-for-update', () => {
+    console.log('🔍 正在檢查更新...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log('✅ 發現新版本:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-available', info);
+    }
+  });
+
+  autoUpdater.on('update-not-available', (info) => {
+    console.log('✅ 目前已是最新版本:', info.version);
+  });
+
+  autoUpdater.on('error', (err) => {
+    console.error('❌ 自動更新錯誤:', err);
+  });
+
+  autoUpdater.on('download-progress', (progressObj) => {
+    const message = `下載進度: ${Math.round(progressObj.percent)}%`;
+    console.log(message);
+    if (mainWindow) {
+      mainWindow.webContents.send('download-progress', progressObj);
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log('✅ 更新已下載完成:', info.version);
+    if (mainWindow) {
+      mainWindow.webContents.send('update-downloaded', info);
+    }
+  });
+
+  // 應用程式啟動 5 秒後檢查更新
+  setTimeout(() => {
+    console.log('🔍 開始檢查更新...');
+    autoUpdater.checkForUpdates();
+  }, 5000);
+
+  return autoUpdater;
+}
+
 // 當Electron完成初始化並準備創建瀏覽器窗口時調用此方法
 app.whenReady().then(() => {
   setupIpcHandlers();
   createWindow();
   createTray();
   registerGlobalShortcuts();
+
+  // 初始化自動更新器
+  const autoUpdater = setupAutoUpdater();
+
+  // 將 autoUpdater 設為全域變數，供 IPC handler 使用
+  global.autoUpdater = autoUpdater;
 });
 
 // 當所有窗口關閉時的處理
@@ -527,7 +590,7 @@ function setupIpcHandlers() {
   // 強制同步迷你模式狀態
   ipcMain.on('sync-mini-mode-state', (event, rendererMiniMode) => {
     console.log('同步迷你模式狀態 - 主進程:', isMinimized, '渲染進程:', rendererMiniMode);
-    
+
     if (isMinimized !== rendererMiniMode) {
       console.log('檢測到狀態不同步，進行修復');
       if (rendererMiniMode && !isMinimized) {
@@ -537,6 +600,28 @@ function setupIpcHandlers() {
         // 主進程認為在迷你模式，但渲染進程不是
         restoreFromMiniMode();
       }
+    }
+  });
+
+  // 處理自動更新相關的 IPC 事件
+  ipcMain.on('download-update', () => {
+    console.log('開始下載更新...');
+    if (global.autoUpdater) {
+      global.autoUpdater.downloadUpdate();
+    }
+  });
+
+  ipcMain.on('quit-and-install', () => {
+    console.log('退出並安裝更新...');
+    if (global.autoUpdater) {
+      global.autoUpdater.quitAndInstall();
+    }
+  });
+
+  ipcMain.on('check-for-updates', () => {
+    console.log('手動檢查更新...');
+    if (global.autoUpdater) {
+      global.autoUpdater.checkForUpdates();
     }
   });
 }

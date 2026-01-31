@@ -16,12 +16,17 @@
             
             <div class="user-selection-buttons">
                 <button id="select-user1" class="user-selection-btn" data-user="user1">
-                    <div class="user-avatar">👤</div>
+                    <div class="user-avatar">👧</div>
                     <div class="user-name">品瑜</div>
                 </button>
                 <button id="select-user2" class="user-selection-btn" data-user="user2">
-                    <div class="user-avatar">👤</div>
+                    <div class="user-avatar">👧</div>
                     <div class="user-name">品榕</div>
+                </button>
+                <button id="select-parent" class="user-selection-btn parent-btn" data-user="parent">
+                    <div class="user-avatar">👨‍👩‍👧‍👧</div>
+                    <div class="user-name">家長模式</div>
+                    <div class="user-subtitle">（觀察模式）</div>
                 </button>
             </div>
             
@@ -154,7 +159,15 @@
             <button id="pause-btn" class="control-btn" disabled>暫停</button>
             <button id="reset-btn" class="control-btn" disabled>重置</button>
         </div>
-        
+
+        <!-- 家長模式：即時計時狀態 -->
+        <div id="parent-live-status" class="parent-live-status" style="display: none;">
+            <div class="live-status-title">📊 即時計時狀態</div>
+            <div id="live-status-content" class="live-status-content">
+                <div class="no-active-timer">目前沒有人在計時</div>
+            </div>
+        </div>
+
         <!-- 今日使用統計 -->
         <div class="stats-container">
             <div class="stats-title">今日使用統計</div>
@@ -245,6 +258,50 @@
             </div>
         </div>
     </div>
+
+    <!-- Firebase SDK (CDN 版本，v9 模組化) -->
+    <script type="module">
+        // Firebase SDK 匯入
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getFirestore, enableIndexedDbPersistence } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+
+        // Firebase 設定
+        const firebaseConfig = {
+          apiKey: "AIzaSyDATiNoPRZ68f65YdKoJcbpIIqbRxWw7oo",
+          authDomain: "timer-app-9271b.firebaseapp.com",
+          projectId: "timer-app-9271b",
+          storageBucket: "timer-app-9271b.firebasestorage.app",
+          messagingSenderId: "445700137847",
+          appId: "1:445700137847:web:c6af3effc718aefb587772"
+        };
+
+        // 初始化 Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        // 啟用離線持久化
+        enableIndexedDbPersistence(db).catch((err) => {
+            if (err.code === 'failed-precondition') {
+                console.warn('Firebase 持久化失敗：多個分頁開啟');
+            } else if (err.code === 'unimplemented') {
+                console.warn('Firebase 持久化失敗：瀏覽器不支援');
+            }
+        });
+
+        console.log('✅ Firebase 初始化成功');
+
+        // 將 db 存到 window 物件供 renderer.js 使用
+        window.firebaseDB = db;
+
+        // 匯出 Firestore 函數供 renderer.js 使用
+        import * as firestoreFunctions from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js';
+        window.firestoreFunctions = firestoreFunctions;
+    </script>
+
+    <!-- Firebase 輔助函數 -->
+    <script src="firebase-helpers.js"></script>
+
+    <!-- 主程式 -->
     <script src="renderer.js"></script>
 </body>
 </html>

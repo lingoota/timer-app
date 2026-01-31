@@ -82,6 +82,7 @@ document.addEventListener('DOMContentLoaded', function() {
         alarmAudio: null, // 用於追蹤警報音效
         alarmTimeout: null, // 用於自動停止1分鐘警報
         lastCompletionTime: null, // 上次計時完成的時間
+        isParentMode: false,  // 新增：家長觀察模式
         cooldownDuration: 5 * 60 * 1000, // 5分鐘冷卻期（毫秒）
         cooldownUpdateInterval: null, // 冷卻期更新定時器
         alarmCycleTimeout: null, // 警報循環定時器
@@ -1036,110 +1037,80 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 從Google Sheets載入數據
+    // 從 Firebase 載入數據 (新版)
     async function loadDataFromSheets() {
         updateSyncStatus('正在載入...', true);
-        
-        const today = getTodayDate();
-        console.log("=== 載入Google Sheets數據 ===");
-        console.log("Loading data for date:", today);
-        console.log("SCRIPT_URL:", SCRIPT_URL);
-        
-        const timestamp = new Date().getTime();
-        const url = `${SCRIPT_URL}?action=getTodayTotal&date=${encodeURIComponent(today)}&_=${timestamp}`;
-        console.log("完整請求URL:", url);
+
+        console.log("=== 載入 Firebase 數據 ===");
 
         try {
-            console.log("開始發送請求...");
-            const result = await window.api.invoke('fetch-google-script', url);
-            console.log("收到主進程回應:", result);
+            // 取得今天的統計數據
+            const todayStats = await getTodayStats();
+            console.log("Firebase 今日統計:", todayStats);
 
-            if (result.success) {
-                const data = result.data;
-                console.log("=== Google Sheets Response ===");
-                console.log("Raw data:", data);
+            // 更新品瑜的數據
+            state.user1TotalTime = todayStats.pinyu.totalTime;
+            state.user1CategoryTime = todayStats.pinyu.activities;
 
-                if (data && data.result === 'success') {
-                    const cloudUser1Total = parseInt(data.user1Total) || 0;
-                    const cloudUser2Total = parseInt(data.user2Total) || 0;
-                    const cloudUser1Sessions = parseInt(data.user1Sessions) || 0;
-                    const cloudUser2Sessions = parseInt(data.user2Sessions) || 0;
+            // 更新品榕的數據
+            state.user2TotalTime = todayStats.pinrong.totalTime;
+            state.user2CategoryTime = todayStats.pinrong.activities;
 
-                    if (cloudUser1Total >= 0 && cloudUser2Total >= 0) {
-                        // 保存當前的活動類別數據，避免被覆蓋
-                        const savedUser1CategoryTime = state.user1CategoryTime;
-                        const savedUser2CategoryTime = state.user2CategoryTime;
-                        
-                        state.user1TotalTime = cloudUser1Total;
-                        state.user2TotalTime = cloudUser2Total;
-                        state.user1SessionCount = cloudUser1Sessions;
-                        state.user2SessionCount = cloudUser2Sessions;
-                        
-                        // 恢復活動類別數據
-                        state.user1CategoryTime = savedUser1CategoryTime;
-                        state.user2CategoryTime = savedUser2CategoryTime;
-                        
-                        console.log('雲端同步後保護活動類別數據:', {
-                            user1CategoryTime: state.user1CategoryTime,
-                            user2CategoryTime: state.user2CategoryTime
-                        });
-                        
-                        updateStatsDisplay();
-                        saveLocalBackup();
-                        
-                        // 嘗試載入活動類別數據
-                        loadCategoryDataFromSheets();
-                    }
-                    
-                    updateSyncStatus('已同步');
-                    showToast('已從雲端載入今日使用記錄');
-                } else {
-                    updateSyncStatus('載入失敗');
-                    showToast('無法載入雲端記錄，使用本地備份');
-                    console.error('Error loading data:', data ? data.message : 'Unknown error');
-                }
-            } else {
-                updateSyncStatus('載入失敗');
-                showToast('網路請求失敗，使用本地備份');
-                console.error('Failed to fetch from Google Script:', result.error);
-            }
+            // 從 Firebase 取得使用者統計（計時次數）
+            const pinyuStats = await getUserStats('pinyu');
+            const pinrongStats = await getUserStats('pinrong');
+
+            state.user1SessionCount = pinyuStats.timerCount || 0;
+            state.user2SessionCount = pinrongStats.timerCount || 0;
+
+            console.log('Firebase 同步完成:', {
+                user1: { time: state.user1TotalTime, sessions: state.user1SessionCount },
+                user2: { time: state.user2TotalTime, sessions: state.user2SessionCount }
+            });
+
+            updateStatsDisplay();
+            saveLocalBackup();
+
+            updateSyncStatus('已同步 ☁️');
+            showToast('已從 Firebase 載入今日使用記錄');
         } catch (error) {
             updateSyncStatus('載入錯誤');
-            showToast('發生預期外的錯誤，使用本地備份');
-            console.error('Error in loadDataFromSheets:', error);
+            showToast('Firebase 載入失敗，使用本地備份');
+            console.error('Error in loadDataFromFirebase:', error);
         }
     }
     
-    // 保存記錄到Google Sheets
+    // 保存記錄到 Firebase (新版)
     async function saveRecordToSheets(user, category, duration, startTime, endTime, sessionCount) {
         updateSyncStatus('正在同步...', true);
-        
-        const today = getTodayDate();
-        const formattedStartTime = formatTimeForSheets(startTime);
-        const formattedEndTime = formatTimeForSheets(endTime);
-        
-        const url = `${SCRIPT_URL}?action=addRecord&date=${encodeURIComponent(today)}&user=${encodeURIComponent(user)}&category=${encodeURIComponent(category)}&duration=${duration}&startTime=${encodeURIComponent(formattedStartTime)}&endTime=${encodeURIComponent(formattedEndTime)}&sessions=${sessionCount}`;
 
         try {
-            const result = await window.api.invoke('fetch-google-script', url);
+            // 轉換使用者名稱為 userId
+            const userId = user === '品瑜' ? 'pinyu' : 'pinrong';
 
-            if (result.success && result.data.result === 'success') {
-                updateSyncStatus('已同步');
-                showToast('使用記錄已存到雲端');
-                console.log('Record saved successfully');
-                
+            console.log(`準備儲存到 Firebase: ${user} (${userId}), ${category}, ${duration}分鐘`);
+
+            // 記錄活動到 Firebase
+            const success = await recordActivity(userId, duration, category);
+
+            if (success) {
+                updateSyncStatus('已同步 ☁️');
+                showToast('使用記錄已存到 Firebase');
+                console.log('✅ Firebase 儲存成功');
+
+                // 重新載入數據以更新顯示
                 setTimeout(() => {
                     loadDataFromSheets();
-                }, 1000);
+                }, 500);
             } else {
                 updateSyncStatus('同步失敗');
-                showToast('無法存檔到雲端，已保存本地備份');
-                console.error('Error saving record:', result.error || (result.data ? result.data.message : 'Unknown error'));
+                showToast('無法存檔到 Firebase，已保存本地備份');
+                console.error('❌ Firebase 儲存失敗');
             }
         } catch (error) {
             updateSyncStatus('同步錯誤');
-            showToast('無法存檔到雲端，已保存本地備份');
-            console.error('Error in saveRecordToSheets:', error);
+            showToast('無法存檔到 Firebase，已保存本地備份');
+            console.error('Error in saveRecordToFirebase:', error);
         }
     }
     
@@ -1171,8 +1142,12 @@ document.addEventListener('DOMContentLoaded', function() {
         return `${year}/${month}/${day}`;
     }
     
-    // 載入活動類別數據
+    // 載入活動類別數據 (Firebase 版本已整合到 loadDataFromSheets，不再需要此函數)
     async function loadCategoryDataFromSheets() {
+        // Firebase 版本不需要單獨載入活動類別數據
+        // getTodayStats() 已經包含所有活動分類資訊
+        console.log("使用 Firebase 版本，活動類別數據已整合");
+        return;
         console.log("=== 載入活動類別數據 ===");
         
         const today = getTodayDate();
@@ -1553,7 +1528,7 @@ document.addEventListener('DOMContentLoaded', function() {
         state.isDarkMode = !state.isDarkMode;
         document.documentElement.setAttribute('data-theme', state.isDarkMode ? 'dark' : 'light');
         localStorage.setItem('theme', state.isDarkMode ? 'dark' : 'light');
-        dom.themeToggle.textContent = state.isDarkMode ? '☀️' : '🌙';
+        dom.themeToggle.textContent = state.isDarkMode ? '☀️' : '���';
         // 重新渲染圖表以更新顏色
         if (dom.chartsModal.classList.contains('hidden') === false) {
             renderCharts();
@@ -1737,16 +1712,216 @@ document.addEventListener('DOMContentLoaded', function() {
     function hideUserSelection() {
         dom.userSelectionOverlay.classList.add('hidden');
     }
-    
+
+    // 隱藏計時器控制按鈕（家長模式使用）
+    function hideTimerControls() {
+        const timerControls = document.querySelector('.timer-controls');
+        const categorySelection = document.querySelector('.category-selection');
+        const durationControls = document.querySelector('.duration-controls');
+
+        if (timerControls) timerControls.style.display = 'none';
+        if (categorySelection) categorySelection.style.display = 'none';
+        if (durationControls) durationControls.style.display = 'none';
+
+        console.log('✅ 已隱藏計時器控制按鈕');
+    }
+
+    // 顯示計時器控制按鈕（一般使用者模式）
+    function showTimerControls() {
+        const timerControls = document.querySelector('.timer-controls');
+        const categorySelection = document.querySelector('.category-selection');
+        const durationControls = document.querySelector('.duration-controls');
+
+        if (timerControls) timerControls.style.display = 'flex';
+        if (categorySelection) categorySelection.style.display = 'block';
+        if (durationControls) durationControls.style.display = 'flex';
+
+        // 停止家長模式監控
+        stopParentLiveMonitor();
+
+        console.log('✅ 已顯示計時器控制按鈕');
+    }
+
+    // 顯示家長儀表板（觀察模式）
+    async function showParentDashboard() {
+        console.log('📊 載入家長儀表板...');
+
+        try {
+            // 顯示即時狀態區域
+            const liveStatusDiv = document.getElementById('parent-live-status');
+            if (liveStatusDiv) {
+                liveStatusDiv.style.display = 'block';
+            }
+
+            // 載入今日統計資料
+            const todayStats = await getTodayStats();
+
+            // 顯示品瑜的資料
+            const pinyuTime = todayStats.pinyu.totalTime || 0;
+            const pinyuActivities = todayStats.pinyu.records || [];
+
+            // 顯示品榕的資料
+            const pinrongTime = todayStats.pinrong.totalTime || 0;
+            const pinrongActivities = todayStats.pinrong.records || [];
+
+            console.log('📊 品瑜今日使用:', pinyuTime, '分鐘');
+            console.log('📊 品榕今日使用:', pinrongTime, '分鐘');
+
+            // 更新統計顯示
+            updateStatsDisplay();
+
+            // 開始監控即時計時狀態
+            startParentLiveMonitor();
+
+            // 顯示提示訊息
+            showToast('家長模式：可查看兩位孩子的使用資料');
+
+            console.log('✅ 家長儀表板載入完成');
+        } catch (error) {
+            console.error('❌ 載入家長儀表板失敗:', error);
+            showToast('載入資料失敗，請稍後再試', 'error');
+        }
+    }
+
+    // 家長模式即時監控
+    let parentLiveMonitorInterval = null;
+
+    function startParentLiveMonitor() {
+        // 立即更新一次
+        updateParentLiveStatus();
+
+        // 每秒更新一次
+        if (parentLiveMonitorInterval) {
+            clearInterval(parentLiveMonitorInterval);
+        }
+
+        parentLiveMonitorInterval = setInterval(() => {
+            updateParentLiveStatus();
+        }, 1000);
+
+        console.log('✅ 家長模式即時監控已啟動');
+    }
+
+    function stopParentLiveMonitor() {
+        if (parentLiveMonitorInterval) {
+            clearInterval(parentLiveMonitorInterval);
+            parentLiveMonitorInterval = null;
+            console.log('✅ 家長模式即時監控已停止');
+        }
+
+        // 隱藏即時狀態區域
+        const liveStatusDiv = document.getElementById('parent-live-status');
+        if (liveStatusDiv) {
+            liveStatusDiv.style.display = 'none';
+        }
+    }
+
+    function updateParentLiveStatus() {
+        const liveStatusContent = document.getElementById('live-status-content');
+        if (!liveStatusContent) return;
+
+        // 檢查是否有正在計時的使用者
+        // 需要檢查 localStorage 中其他使用者的計時狀態
+        const user1Data = getOtherUserTimerData('user1');
+        const user2Data = getOtherUserTimerData('user2');
+
+        let activeTimer = null;
+
+        if (user1Data && user1Data.isRunning) {
+            activeTimer = { ...user1Data, userName: '品瑜', userClass: 'user1-color' };
+        } else if (user2Data && user2Data.isRunning) {
+            activeTimer = { ...user2Data, userName: '品榕', userClass: 'user2-color' };
+        }
+
+        if (activeTimer) {
+            // 計算剩餘時間
+            const elapsed = Date.now() - activeTimer.startTime;
+            const remaining = Math.max(0, activeTimer.totalDuration * 60 * 1000 - elapsed);
+            const remainingMinutes = Math.floor(remaining / 60000);
+            const remainingSeconds = Math.floor((remaining % 60000) / 1000);
+
+            // 計算進度
+            const progress = Math.floor((elapsed / (activeTimer.totalDuration * 60 * 1000)) * 100);
+
+            liveStatusContent.innerHTML = `
+                <div class="active-timer-info">
+                    <div class="timer-user ${activeTimer.userClass}">
+                        👤 ${activeTimer.userName} 正在計時
+                    </div>
+                    <div class="timer-category">
+                        📋 ${activeTimer.category}
+                    </div>
+                    <div class="timer-progress ${activeTimer.userClass}">
+                        ${String(remainingMinutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}
+                    </div>
+                    <div class="timer-remaining">
+                        剩餘時間 ${remainingMinutes} 分 ${remainingSeconds} 秒 (${progress}%)
+                    </div>
+                </div>
+            `;
+        } else {
+            liveStatusContent.innerHTML = `
+                <div class="no-active-timer">目前沒有人在計時</div>
+            `;
+        }
+    }
+
+    function getOtherUserTimerData(userId) {
+        try {
+            const savedState = localStorage.getItem(`timerState_${userId}`);
+            if (savedState) {
+                const data = JSON.parse(savedState);
+                return data;
+            }
+        } catch (error) {
+            console.error(`讀取 ${userId} 計時資料失敗:`, error);
+        }
+        return null;
+    }
+
     // 設置選中的用戶
     function setSelectedUser(user) {
         console.log('=== 設置用戶 ===');
         console.log('用戶ID:', user);
-        
+
         state.selectedUser = user;
+
+        // 家長模式處理
+        if (user === 'parent') {
+            state.isParentMode = true;
+            const userName = '家長模式';
+            console.log('用戶名稱:', userName);
+
+            // 更新當前用戶顯示
+            if (dom.currentUserName) {
+                dom.currentUserName.textContent = userName;
+                console.log('更新當前用戶顯示:', userName);
+            }
+
+            // 更新用戶顯示區域
+            if (dom.userDisplay) {
+                dom.userDisplay.textContent = '觀察模式';
+                dom.userDisplay.className = 'user-display parent-color';
+                console.log('更新用戶顯示區域為觀察模式');
+            }
+
+            // 隱藏計時器控制按鈕
+            hideTimerControls();
+            // 顯示家長儀表板
+            showParentDashboard();
+
+            console.log('家長模式設置完成');
+            return;
+        }
+
+        // 一般使用者模式
+        state.isParentMode = false;
         const userName = user === 'user1' ? '品瑜' : '品榕';
         console.log('用戶名稱:', userName);
-        
+
+        // 顯示計時器控制按鈕
+        showTimerControls();
+
         // 更新當前用戶顯示
         if (dom.currentUserName) {
             dom.currentUserName.textContent = userName;
@@ -1754,7 +1929,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             console.error('currentUserName 元素不存在');
         }
-        
+
         // 更新用戶顯示區域
         if (dom.userDisplay) {
             dom.userDisplay.textContent = userName;
@@ -1763,7 +1938,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             console.error('userDisplay 元素不存在');
         }
-        
+
         // 更新進度條顏色
         if (dom.progressBar) {
             const computedStyle = getComputedStyle(document.documentElement);
@@ -1773,7 +1948,7 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
             console.error('progressBar 元素不存在');
         }
-        
+
         // 檢查開始按鈕狀態
         console.log('當前狀態:', {
             selectedUser: state.selectedUser,
@@ -1782,7 +1957,7 @@ document.addEventListener('DOMContentLoaded', function() {
             isRunning: state.isRunning
         });
         checkStartButtonState();
-        
+
         console.log('用戶設置完成:', userName);
     }
     
@@ -1794,10 +1969,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 selectUserAndRemember('user1');
             });
         }
-        
+
         if (dom.selectUser2Btn) {
             dom.selectUser2Btn.addEventListener('click', () => {
                 selectUserAndRemember('user2');
+            });
+        }
+
+        // 家長模式按鈕
+        const parentBtn = document.getElementById('select-parent');
+        if (parentBtn) {
+            parentBtn.addEventListener('click', () => {
+                selectUserAndRemember('parent');
             });
         }
         
