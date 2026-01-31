@@ -248,9 +248,77 @@ async function getTodayStats() {
     }
 }
 
+/**
+ * 更新使用者的即時計時狀態到 Firebase
+ * @param {string} userId - 使用者 ID ('pinyu' 或 'pinrong')
+ * @param {Object} timerState - 計時狀態
+ * @param {boolean} timerState.isRunning - 是否正在計時
+ * @param {number} timerState.startTime - 開始時間 (timestamp)
+ * @param {number} timerState.totalDuration - 總時長 (分鐘)
+ * @param {string} timerState.category - 活動類別
+ */
+async function updateLiveTimerStatus(userId, timerState) {
+    try {
+        const liveStatusRef = firebase.firestore()
+            .collection('live-timer-status')
+            .doc(userId);
+
+        if (timerState.isRunning) {
+            await liveStatusRef.set({
+                isRunning: true,
+                startTime: timerState.startTime,
+                totalDuration: timerState.totalDuration,
+                category: timerState.category,
+                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`✅ Firebase: ${userId} 即時計時狀態已更新`);
+        } else {
+            // 不在計時時，清除狀態
+            await liveStatusRef.set({
+                isRunning: false,
+                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            console.log(`✅ Firebase: ${userId} 已停止計時`);
+        }
+    } catch (error) {
+        console.error(`❌ Firebase: 更新 ${userId} 即時計時狀態失敗:`, error);
+    }
+}
+
+/**
+ * 取得所有使用者的即時計時狀態
+ * @returns {Promise<Object>} 包含 pinyu 和 pinrong 的計時狀態
+ */
+async function getLiveTimerStatus() {
+    try {
+        const liveStatusCollection = firebase.firestore().collection('live-timer-status');
+
+        const [pinyuDoc, pinrongDoc] = await Promise.all([
+            liveStatusCollection.doc('pinyu').get(),
+            liveStatusCollection.doc('pinrong').get()
+        ]);
+
+        const pinyuStatus = pinyuDoc.exists ? pinyuDoc.data() : { isRunning: false };
+        const pinrongStatus = pinrongDoc.exists ? pinrongDoc.data() : { isRunning: false };
+
+        return {
+            pinyu: pinyuStatus,
+            pinrong: pinrongStatus
+        };
+    } catch (error) {
+        console.error('❌ Firebase: 取得即時計時狀態失敗:', error);
+        return {
+            pinyu: { isRunning: false },
+            pinrong: { isRunning: false }
+        };
+    }
+}
+
 // 將函數掛載到 window 物件，供 renderer.js 使用
 window.initializeUser = initializeUser;
 window.getUserStats = getUserStats;
 window.recordActivity = recordActivity;
 window.getTodayActivities = getTodayActivities;
 window.getTodayStats = getTodayStats;
+window.updateLiveTimerStatus = updateLiveTimerStatus;
+window.getLiveTimerStatus = getLiveTimerStatus;

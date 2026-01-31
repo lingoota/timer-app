@@ -922,6 +922,12 @@ body.mini-mode-active {
     padding: 10px;
 }
 
+/* 讓時間線條圖佔據完整寬度 */
+.chart-section:has(#pinyu-timeline-chart),
+.chart-section:has(#pinrong-timeline-chart) {
+    grid-column: 1 / -1;
+}
+
 .chart-section {
     text-align: center;
 }
@@ -961,6 +967,14 @@ body.mini-mode-active {
     height: 16px;
     border-radius: 3px;
     display: inline-block;
+}
+
+/* 時間線條圖提示文字 */
+.timeline-info {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    margin-top: 10px;
+    font-style: italic;
 }
 
 @media (max-width: 700px) {

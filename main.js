@@ -21,18 +21,20 @@ function createWindow() {
   // 獲取螢幕尺寸
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-  
-  // 計算窗口大小（螢幕的85%高度，保持適當比例）
-  const windowHeight = Math.floor(screenHeight * 0.85);
-  const windowWidth = Math.min(650, Math.floor(windowHeight * 0.7)); // 保持比例且不超過650px寬
-  
+
+  // 計算窗口大小（針對 22 吋 1920x1080 螢幕優化）
+  // 寬度：螢幕的 50%（約 960px），最小 800px，最大 1200px
+  const windowWidth = Math.max(800, Math.min(1200, Math.floor(screenWidth * 0.5)));
+  // 高度：螢幕的 90%（約 972px），最小 800px
+  const windowHeight = Math.max(800, Math.floor(screenHeight * 0.9));
+
   // 創建瀏覽器窗口
   mainWindow = new BrowserWindow({
     width: windowWidth,
     height: windowHeight,
-    minWidth: 400,  // 正常模式的最小寬度
-    minHeight: 500,  // 正常模式的最小高度
-    maxWidth: 800,
+    minWidth: 700,  // 正常模式的最小寬度（增加以容納圖表）
+    minHeight: 700,  // 正常模式的最小高度（增加以減少滾動）
+    maxWidth: 1400,  // 增加最大寬度
     webPreferences: {
       // __dirname 指向的是 main.js 所在的根目錄
       preload: path.join(__dirname, 'src', 'preload.js'),

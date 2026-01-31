@@ -475,7 +475,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 開始按鈕
-    dom.startBtn.addEventListener('click', function() {
+    dom.startBtn.addEventListener('click', async function() {
         if (state.selectedUser && state.timeLeft > 0 && !state.isRunning) {
             stopAlarmSound(); // 停止可能在播放的警報
             state.isRunning = true;
@@ -483,28 +483,39 @@ document.addEventListener('DOMContentLoaded', function() {
             dom.startBtn.classList.remove('active');
             dom.pauseBtn.disabled = false;
             dom.resetBtn.disabled = false;
-            
+
             state.startTimestamp = new Date();
             state.lastUpdateTime = Date.now();
-            
+
             // 使用更高頻率的計時器來防止休眠
             state.timer = setInterval(updateTimer, 100);
-            
+
             // 啟動防休眠機制
             state.preventSleepInterval = setInterval(preventSystemSleep, 30000);
-            
+
             // 放大使用者名稱
             dom.userDisplay.classList.add('timing');
-            
+
             dom.sandAnimation.style.display = 'block';
             startSandAnimation();
-            
+
             if (state.soundEnabled) {
                 playSound('start');
             }
-            
+
             showToast(`${state.selectedUser === 'user1' ? '品瑜' : '品榕'}的計時開始!`);
-            
+
+            // 更新 Firebase 即時計時狀態
+            const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
+            if (window.updateLiveTimerStatus) {
+                window.updateLiveTimerStatus(userId, {
+                    isRunning: true,
+                    startTime: Date.now(),
+                    totalDuration: state.totalDuration,
+                    category: state.selectedCategory
+                });
+            }
+
             // 延遲進入迷你模式，讓用戶看到計時開始
             setTimeout(() => {
                 enterMiniMode();
@@ -522,17 +533,23 @@ document.addEventListener('DOMContentLoaded', function() {
             dom.startBtn.disabled = false;
             dom.startBtn.classList.add('active');
             dom.pauseBtn.disabled = true;
-            
+
             // 恢復使用者名稱大小
             dom.userDisplay.classList.remove('timing');
-            
+
             dom.sandAnimation.style.display = 'none';
-            
+
             if (state.soundEnabled) {
                 playSound('pause');
             }
-            
+
             showToast('計時已暫停');
+
+            // 更新 Firebase 即時計時狀態（停止計時）
+            const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
+            if (window.updateLiveTimerStatus) {
+                window.updateLiveTimerStatus(userId, { isRunning: false });
+            }
         }
     });
     
@@ -566,8 +583,14 @@ document.addEventListener('DOMContentLoaded', function() {
         if (state.soundEnabled) {
             playSound('reset');
         }
-        
+
         showToast('計時已重置');
+
+        // 更新 Firebase 即時計時狀態（停止計時）
+        const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
+        if (window.updateLiveTimerStatus) {
+            window.updateLiveTimerStatus(userId, { isRunning: false });
+        }
     });
     
     // 停止警報按鈕
@@ -1816,50 +1839,66 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function updateParentLiveStatus() {
+    async function updateParentLiveStatus() {
         const liveStatusContent = document.getElementById('live-status-content');
         if (!liveStatusContent) return;
 
-        // 檢查是否有正在計時的使用者
-        // 需要檢查 localStorage 中其他使用者的計時狀態
-        const user1Data = getOtherUserTimerData('user1');
-        const user2Data = getOtherUserTimerData('user2');
+        try {
+            // 從 Firebase 取得即時計時狀態
+            const liveStatus = await window.getLiveTimerStatus();
 
-        let activeTimer = null;
+            let activeTimer = null;
 
-        if (user1Data && user1Data.isRunning) {
-            activeTimer = { ...user1Data, userName: '品瑜', userClass: 'user1-color' };
-        } else if (user2Data && user2Data.isRunning) {
-            activeTimer = { ...user2Data, userName: '品榕', userClass: 'user2-color' };
-        }
+            // 檢查品瑜是否正在計時
+            if (liveStatus.pinyu && liveStatus.pinyu.isRunning) {
+                activeTimer = {
+                    ...liveStatus.pinyu,
+                    userName: '品瑜',
+                    userClass: 'user1-color'
+                };
+            }
+            // 檢查品榕是否正在計時
+            else if (liveStatus.pinrong && liveStatus.pinrong.isRunning) {
+                activeTimer = {
+                    ...liveStatus.pinrong,
+                    userName: '品榕',
+                    userClass: 'user2-color'
+                };
+            }
 
-        if (activeTimer) {
-            // 計算剩餘時間
-            const elapsed = Date.now() - activeTimer.startTime;
-            const remaining = Math.max(0, activeTimer.totalDuration * 60 * 1000 - elapsed);
-            const remainingMinutes = Math.floor(remaining / 60000);
-            const remainingSeconds = Math.floor((remaining % 60000) / 1000);
+            if (activeTimer) {
+                // 計算剩餘時間
+                const elapsed = Date.now() - activeTimer.startTime;
+                const remaining = Math.max(0, activeTimer.totalDuration * 60 * 1000 - elapsed);
+                const remainingMinutes = Math.floor(remaining / 60000);
+                const remainingSeconds = Math.floor((remaining % 60000) / 1000);
 
-            // 計算進度
-            const progress = Math.floor((elapsed / (activeTimer.totalDuration * 60 * 1000)) * 100);
+                // 計算進度
+                const progress = Math.min(100, Math.floor((elapsed / (activeTimer.totalDuration * 60 * 1000)) * 100));
 
-            liveStatusContent.innerHTML = `
-                <div class="active-timer-info">
-                    <div class="timer-user ${activeTimer.userClass}">
-                        👤 ${activeTimer.userName} 正在計時
+                liveStatusContent.innerHTML = `
+                    <div class="active-timer-info">
+                        <div class="timer-user ${activeTimer.userClass}">
+                            👤 ${activeTimer.userName} 正在計時
+                        </div>
+                        <div class="timer-category">
+                            📋 ${activeTimer.category}
+                        </div>
+                        <div class="timer-progress ${activeTimer.userClass}">
+                            ${String(remainingMinutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}
+                        </div>
+                        <div class="timer-remaining">
+                            剩餘時間 ${remainingMinutes} 分 ${remainingSeconds} 秒 (${progress}%)
+                        </div>
                     </div>
-                    <div class="timer-category">
-                        📋 ${activeTimer.category}
-                    </div>
-                    <div class="timer-progress ${activeTimer.userClass}">
-                        ${String(remainingMinutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}
-                    </div>
-                    <div class="timer-remaining">
-                        剩餘時間 ${remainingMinutes} 分 ${remainingSeconds} 秒 (${progress}%)
-                    </div>
-                </div>
-            `;
-        } else {
+                `;
+            } else {
+                liveStatusContent.innerHTML = `
+                    <div class="no-active-timer">目前沒有人在計時</div>
+                `;
+            }
+        } catch (error) {
+            console.error('❌ 更新即時計時狀態失敗:', error);
             liveStatusContent.innerHTML = `
                 <div class="no-active-timer">目前沒有人在計時</div>
             `;
@@ -2171,26 +2210,53 @@ document.addEventListener('DOMContentLoaded', function() {
     // === 圖表功能實現 ===
     
     // 渲染圖表函數
-    function renderCharts() {
+    async function renderCharts() {
         console.log('開始渲染圖表');
-        
+
         try {
             // 獲取當前數據
             const user1Minutes = Math.round(state.user1TotalTime / 60);
             const user2Minutes = Math.round(state.user2TotalTime / 60);
             const user1Sessions = state.user1SessionCount;
             const user2Sessions = state.user2SessionCount;
-            
+
             // 渲染當前用戶活動類別分佈餅圖
             renderDailyPieChart();
-            
+
             // 渲染用戶對比圖
             renderUserComparisonChart(user1Minutes, user1Sessions, user2Minutes, user2Sessions);
-            
+
+            // 渲染 24 小時使用時間線條圖
+            await renderTimelineCharts();
+
             showToast('圖表已更新');
         } catch (error) {
             console.error('渲染圖表時發生錯誤:', error);
             showToast('圖表渲染失敗');
+        }
+    }
+
+    /**
+     * 渲染兩位使用者的 24 小時時間線條圖
+     */
+    async function renderTimelineCharts() {
+        try {
+            // 從 Firebase 取得今日活動記錄
+            const todayStats = await window.getTodayStats();
+
+            // 品瑜的資料
+            const pinyuRecords = todayStats.pinyu.records || [];
+            const pinyuHourlyData = calculateHourlyUsage(pinyuRecords);
+            renderTimelineChart('pinyu-timeline-chart', pinyuHourlyData, '品瑜', 'rgb(100, 220, 255)');
+
+            // 品榕的資料
+            const pinrongRecords = todayStats.pinrong.records || [];
+            const pinrongHourlyData = calculateHourlyUsage(pinrongRecords);
+            renderTimelineChart('pinrong-timeline-chart', pinrongHourlyData, '品榕', 'rgb(255, 180, 100)');
+
+            console.log('✅ 24 小時時間線條圖渲染完成');
+        } catch (error) {
+            console.error('❌ 渲染時間線條圖失敗:', error);
         }
     }
     
@@ -2374,7 +2440,168 @@ document.addEventListener('DOMContentLoaded', function() {
             </div>
         `;
     }
-    
+
+    // ===================================
+    // 24 小時使用時間線條圖
+    // ===================================
+
+    /**
+     * 繪製 24 小時使用時間線條圖
+     * @param {string} canvasId - Canvas 元素 ID
+     * @param {Array} hourlyData - 24 小時的使用時間資料 (分鐘)
+     * @param {string} userName - 使用者名稱
+     * @param {string} color - 線條顏色
+     */
+    function renderTimelineChart(canvasId, hourlyData, userName, color) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) {
+            console.error(`找不到 canvas: ${canvasId}`);
+            return;
+        }
+
+        const ctx = canvas.getContext('2d');
+        const width = canvas.width;
+        const height = canvas.height;
+
+        // 清除畫布
+        ctx.clearRect(0, 0, width, height);
+
+        // 設定繪圖區域的邊距
+        const padding = { top: 30, right: 40, bottom: 40, left: 50 };
+        const chartWidth = width - padding.left - padding.right;
+        const chartHeight = height - padding.top - padding.bottom;
+
+        // 找出最大值，用於計算 Y 軸比例
+        const maxMinutes = Math.max(...hourlyData, 10); // 至少顯示到 10 分鐘
+        const yScale = chartHeight / maxMinutes;
+        const xScale = chartWidth / 23; // 0-23 小時，共 24 個點
+
+        // 繪製背景網格線
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        ctx.lineWidth = 1;
+
+        // 水平網格線 (每 10 分鐘一條)
+        for (let i = 0; i <= maxMinutes; i += 10) {
+            const y = padding.top + chartHeight - (i * yScale);
+            ctx.beginPath();
+            ctx.moveTo(padding.left, y);
+            ctx.lineTo(padding.left + chartWidth, y);
+            ctx.stroke();
+        }
+
+        // 垂直網格線 (每 4 小時一條)
+        for (let hour = 0; hour <= 24; hour += 4) {
+            const x = padding.left + (hour * xScale);
+            ctx.beginPath();
+            ctx.moveTo(x, padding.top);
+            ctx.lineTo(x, padding.top + chartHeight);
+            ctx.stroke();
+        }
+
+        // 繪製 X 軸
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top + chartHeight);
+        ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
+        ctx.stroke();
+
+        // 繪製 Y 軸
+        ctx.beginPath();
+        ctx.moveTo(padding.left, padding.top);
+        ctx.lineTo(padding.left, padding.top + chartHeight);
+        ctx.stroke();
+
+        // 繪製 X 軸標籤 (小時)
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        for (let hour = 0; hour <= 24; hour += 4) {
+            const x = padding.left + (hour * xScale);
+            const y = padding.top + chartHeight + 20;
+            ctx.fillText(`${hour}:00`, x, y);
+        }
+
+        // 繪製 Y 軸標籤 (分鐘)
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        for (let i = 0; i <= maxMinutes; i += 10) {
+            const y = padding.top + chartHeight - (i * yScale);
+            ctx.fillText(`${i}分`, padding.left - 10, y);
+        }
+
+        // 繪製標題
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${userName} - 今日每小時累計使用時間`, width / 2, 15);
+
+        // 繪製折線圖
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 3;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+
+        ctx.beginPath();
+        for (let hour = 0; hour < 24; hour++) {
+            const x = padding.left + (hour * xScale);
+            const y = padding.top + chartHeight - (hourlyData[hour] * yScale);
+
+            if (hour === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.stroke();
+
+        // 繪製資料點
+        for (let hour = 0; hour < 24; hour++) {
+            const x = padding.left + (hour * xScale);
+            const y = padding.top + chartHeight - (hourlyData[hour] * yScale);
+
+            // 繪製圓點
+            ctx.beginPath();
+            ctx.arc(x, y, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // 如果有使用時間，顯示數值
+            if (hourlyData[hour] > 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(`${hourlyData[hour]}`, x, y - 8);
+                ctx.fillStyle = color;
+            }
+        }
+    }
+
+    /**
+     * 從 Firebase 資料計算每小時的累計使用時間
+     * @param {Array} records - 活動記錄陣列
+     * @returns {Array} 24 小時的使用時間 (分鐘)
+     */
+    function calculateHourlyUsage(records) {
+        const hourlyMinutes = new Array(24).fill(0);
+
+        if (!records || records.length === 0) {
+            return hourlyMinutes;
+        }
+
+        records.forEach(record => {
+            if (record.timestamp) {
+                const date = record.timestamp.toDate ? record.timestamp.toDate() : new Date(record.timestamp);
+                const hour = date.getHours();
+                const minutes = Math.round(record.duration / 60); // 秒轉分鐘
+                hourlyMinutes[hour] += minutes;
+            }
+        });
+
+        return hourlyMinutes;
+    }
+
     // ===================================
     // 自動更新 UI 功能
     // ===================================
