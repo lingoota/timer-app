@@ -1,5 +1,5 @@
 # 設定變數
-$version = "2.0.0-beta.2"
+$version = "2.0.0-beta.3"
 $repoOwner = "lingoota"
 $repoName = "timer-app"
 $tagName = "v$version"
@@ -42,7 +42,7 @@ $releaseData = @{
     name = "$tagName - 修復自動更新按鈕功能"
     body = $releaseBody
     prerelease = $true
-} | ConvertTo-Json
+} | ConvertTo-Json -Depth 10
 
 $headers = @{
     'Authorization' = "Bearer $token"
@@ -53,8 +53,8 @@ try {
     $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$repoOwner/$repoName/releases" `
         -Method Post `
         -Headers $headers `
-        -Body $releaseData `
-        -ContentType 'application/json'
+        -Body ([System.Text.Encoding]::UTF8.GetBytes($releaseData)) `
+        -ContentType 'application/json; charset=utf-8'
 
     Write-Host "✅ Release 已建立，ID: $($release.id)"
     $releaseId = $release.id
