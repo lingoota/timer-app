@@ -1,5 +1,5 @@
 # 設定變數
-$version = "2.0.0-beta.3"
+$version = "2.0.0-beta.4"
 $repoOwner = "lingoota"
 $repoName = "timer-app"
 $tagName = "v$version"
