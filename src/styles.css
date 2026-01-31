@@ -1172,3 +1172,298 @@ body.mini-mode-active {
     white-space: nowrap;
     z-index: 1000;
 }
+
+/* ===================================
+   自動更新 UI 通知樣式
+   =================================== */
+
+/* 1. 更新通知卡片 */
+.update-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+}
+
+.update-content {
+    background: var(--bg-overlay);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    border: 2px solid var(--primary-color);
+    padding: 20px;
+    min-width: 320px;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.update-icon {
+    font-size: 32px;
+    text-align: center;
+    animation: rotate 2s linear infinite;
+}
+
+.update-text {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.update-title {
+    color: var(--primary-color);
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.update-version {
+    color: var(--text-primary);
+    font-size: 14px;
+    text-align: center;
+    font-weight: 500;
+}
+
+.update-message {
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+}
+
+.update-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+.update-actions .btn-primary,
+.update-actions .btn-secondary {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.update-actions .btn-primary {
+    background: var(--primary-color);
+    color: white;
+}
+
+.update-actions .btn-primary:hover {
+    background: var(--primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+}
+
+.update-actions .btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.update-actions .btn-secondary:hover {
+    background: var(--bg-tertiary);
+    transform: translateY(-2px);
+}
+
+/* 2. 下載進度條 */
+.download-progress {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+}
+
+.progress-content {
+    background: var(--bg-overlay);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    border: 2px solid var(--primary-color);
+    padding: 20px;
+    min-width: 320px;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.progress-text {
+    color: var(--text-primary);
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+    position: relative;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
+    border-radius: 4px;
+    width: 0%;
+    transition: width 0.3s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.progress-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    animation: shimmer 1.5s infinite;
+}
+
+.progress-percent {
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+    font-weight: 500;
+}
+
+/* 3. 安裝通知 */
+.install-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+}
+
+.install-content {
+    background: var(--bg-overlay);
+    backdrop-filter: blur(10px);
+    border-radius: 15px;
+    border: 2px solid #10b981;
+    padding: 20px;
+    min-width: 320px;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.install-icon {
+    font-size: 32px;
+    text-align: center;
+}
+
+.install-text {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.install-title {
+    color: #10b981;
+    font-size: 18px;
+    font-weight: 600;
+    text-align: center;
+}
+
+.install-message {
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+}
+
+.install-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 5px;
+}
+
+.install-actions .btn-primary,
+.install-actions .btn-secondary {
+    flex: 1;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.install-actions .btn-primary {
+    background: #10b981;
+    color: white;
+}
+
+.install-actions .btn-primary:hover {
+    background: #059669;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
+}
+
+.install-actions .btn-secondary {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.install-actions .btn-secondary:hover {
+    background: var(--bg-tertiary);
+    transform: translateY(-2px);
+}
+
+/* 動畫效果 */
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+/* 深色模式優化 */
+[data-theme="dark"] .update-content,
+[data-theme="dark"] .progress-content,
+[data-theme="dark"] .install-content {
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}

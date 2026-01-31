@@ -259,6 +259,49 @@
         </div>
     </div>
 
+    <!-- 自動更新通知 UI -->
+    <!-- 1. 發現新版本通知 -->
+    <div id="update-notification" class="update-notification" style="display: none;">
+        <div class="update-content">
+            <div class="update-icon">🔄</div>
+            <div class="update-text">
+                <div class="update-title">發現新版本</div>
+                <div class="update-version"></div>
+                <div class="update-message"></div>
+            </div>
+            <div class="update-actions">
+                <button id="download-update-btn" class="btn-primary">下載更新</button>
+                <button id="dismiss-update-btn" class="btn-secondary">稍後提醒</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2. 下載進度顯示 -->
+    <div id="download-progress" class="download-progress" style="display: none;">
+        <div class="progress-content">
+            <div class="progress-text">正在下載更新...</div>
+            <div class="progress-bar">
+                <div class="progress-fill"></div>
+            </div>
+            <div class="progress-percent">0%</div>
+        </div>
+    </div>
+
+    <!-- 3. 安裝提示通知 -->
+    <div id="install-notification" class="install-notification" style="display: none;">
+        <div class="install-content">
+            <div class="install-icon">✅</div>
+            <div class="install-text">
+                <div class="install-title">更新已下載完成</div>
+                <div class="install-message">重啟應用程式以安裝更新</div>
+            </div>
+            <div class="install-actions">
+                <button id="install-now-btn" class="btn-primary">立即重啟</button>
+                <button id="install-later-btn" class="btn-secondary">稍後重啟</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Firebase SDK (CDN 版本，v9 模組化) -->
     <script type="module">
         // Firebase SDK 匯入

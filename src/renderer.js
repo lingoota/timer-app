@@ -2375,8 +2375,171 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
     }
     
+    // ===================================
+    // 自動更新 UI 功能
+    // ===================================
+
+    /**
+     * 顯示更新通知
+     * @param {Object} info - 更新資訊 { version, releaseNotes }
+     */
+    function showUpdateNotification(info) {
+        const notification = document.getElementById('update-notification');
+        const versionEl = notification.querySelector('.update-version');
+        const messageEl = notification.querySelector('.update-message');
+
+        versionEl.textContent = `版本 ${info.version}`;
+        messageEl.textContent = info.releaseNotes ? '有新功能和改進' : '';
+
+        notification.style.display = 'block';
+
+        console.log('🔄 顯示更新通知:', info);
+    }
+
+    /**
+     * 隱藏更新通知
+     */
+    function hideUpdateNotification() {
+        const notification = document.getElementById('update-notification');
+        notification.style.display = 'none';
+    }
+
+    /**
+     * 顯示下載進度
+     */
+    function showDownloadProgress() {
+        const progress = document.getElementById('download-progress');
+        progress.style.display = 'block';
+    }
+
+    /**
+     * 隱藏下載進度
+     */
+    function hideDownloadProgress() {
+        const progress = document.getElementById('download-progress');
+        progress.style.display = 'none';
+    }
+
+    /**
+     * 更新下載進度
+     * @param {Object} progressObj - { percent, transferred, total }
+     */
+    function updateDownloadProgress(progressObj) {
+        const progressFill = document.querySelector('.progress-fill');
+        const progressPercent = document.querySelector('.progress-percent');
+
+        const percent = Math.round(progressObj.percent);
+
+        if (progressFill) {
+            progressFill.style.width = `${percent}%`;
+        }
+
+        if (progressPercent) {
+            progressPercent.textContent = `${percent}%`;
+        }
+
+        console.log(`📥 下載進度: ${percent}%`);
+    }
+
+    /**
+     * 顯示安裝通知
+     * @param {Object} info - 更新資訊
+     */
+    function showInstallNotification(info) {
+        hideDownloadProgress();
+
+        const notification = document.getElementById('install-notification');
+        notification.style.display = 'block';
+
+        console.log('✅ 更新已下載完成，顯示安裝提示');
+    }
+
+    /**
+     * 隱藏安裝通知
+     */
+    function hideInstallNotification() {
+        const notification = document.getElementById('install-notification');
+        notification.style.display = 'none';
+    }
+
+    // 步驟 3: 監聽來自 main.js 的更新事件
+    if (window.api) {
+        // 監聽「發現新版本」事件
+        window.api.on('update-available', (info) => {
+            console.log('🔔 收到更新通知:', info);
+            showUpdateNotification(info);
+        });
+
+        // 監聽「下載進度」事件
+        window.api.on('download-progress', (progressObj) => {
+            updateDownloadProgress(progressObj);
+        });
+
+        // 監聽「更新已下載完成」事件
+        window.api.on('update-downloaded', (info) => {
+            console.log('📦 更新已下載完成:', info);
+            showInstallNotification(info);
+        });
+
+        // 監聽「沒有新版本」事件（可選）
+        window.api.on('update-not-available', (info) => {
+            console.log('✅ 目前已是最新版本:', info.version);
+        });
+
+        // 監聽「更新錯誤」事件（可選）
+        window.api.on('update-error', (error) => {
+            console.error('❌ 更新錯誤:', error);
+        });
+    }
+
+    // 步驟 5: 設定按鈕事件處理
+    // 注意：不需要再包一層 DOMContentLoaded，因為整個 renderer.js 已經在 DOMContentLoaded 中執行
+
+    // 「下載更新」按鈕
+    const downloadBtn = document.getElementById('download-update-btn');
+    if (downloadBtn) {
+        downloadBtn.addEventListener('click', () => {
+            console.log('👆 使用者點擊「下載更新」');
+            if (window.api) {
+                window.api.send('download-update');
+            }
+            hideUpdateNotification();
+            showDownloadProgress();
+        });
+    }
+
+    // 「稍後提醒」按鈕
+    const dismissBtn = document.getElementById('dismiss-update-btn');
+    if (dismissBtn) {
+        dismissBtn.addEventListener('click', () => {
+            console.log('👆 使用者點擊「稍後提醒」');
+            hideUpdateNotification();
+        });
+    }
+
+    // 「立即重啟」按鈕
+    const installNowBtn = document.getElementById('install-now-btn');
+    if (installNowBtn) {
+        installNowBtn.addEventListener('click', () => {
+            console.log('👆 使用者點擊「立即重啟」');
+            if (window.api) {
+                window.api.send('quit-and-install');
+            }
+        });
+    }
+
+    // 「稍後重啟」按鈕
+    const installLaterBtn = document.getElementById('install-later-btn');
+    if (installLaterBtn) {
+        installLaterBtn.addEventListener('click', () => {
+            console.log('👆 使用者點擊「稍後重啟」');
+            hideInstallNotification();
+        });
+    }
+
     // 暴露給全局使用（調試用）
     window.clearRememberedUser = clearRememberedUser;
     window.exportData = exportData;
     window.renderCharts = renderCharts;
+    window.showUpdateNotification = showUpdateNotification; // 測試用
 });
