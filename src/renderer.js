@@ -2711,6 +2711,8 @@ document.addEventListener('DOMContentLoaded', function() {
         // 監聽「沒有新版本」事件（可選）
         window.api.on('update-not-available', (info) => {
             console.log('✅ 目前已是最新版本:', info.version);
+            // 顯示提示訊息
+            alert('✅ 您目前使用的已經是最新版本!');
         });
 
         // 監聽「更新錯誤」事件（可選）
@@ -2761,6 +2763,21 @@ document.addEventListener('DOMContentLoaded', function() {
         installLaterBtn.addEventListener('click', () => {
             console.log('👆 使用者點擊「稍後重啟」');
             hideInstallNotification();
+        });
+    }
+
+    // 「檢查更新」按鈕
+    const checkUpdateBtn = document.getElementById('check-update-btn');
+    if (checkUpdateBtn) {
+        checkUpdateBtn.addEventListener('click', () => {
+            console.log('👆 使用者點擊「檢查更新」');
+            if (window.api) {
+                window.api.send('check-for-updates');
+                console.log('🔍 正在檢查更新...');
+            } else {
+                console.warn('⚠️ window.api 不可用，無法檢查更新');
+                alert('更新功能目前不可用');
+            }
         });
     }
 

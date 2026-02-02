@@ -9,24 +9,27 @@ on:
 jobs:
   build:
     runs-on: windows-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '18'
         cache: 'npm'
-    
+        cache-dependency-path: family-version/package-lock.json
+
     - name: Install dependencies
+      working-directory: family-version
       run: npm install
-    
+
     - name: Build Windows portable
+      working-directory: family-version
       run: npm run build-portable
-    
+
     - name: Upload artifacts
       uses: actions/upload-artifact@v4
       with:
         name: windows-portable-v${{ github.ref_name }}
-        path: dist/*.exe
+        path: family-version/dist/*.exe

@@ -1481,3 +1481,58 @@ body.mini-mode-active {
 [data-theme="dark"] .install-content {
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
 }
+
+/* ==================== 自訂背景時的 UI 元素優化 ==================== */
+/* 當有自訂背景時，為所有主要 UI 元素加上半透明背景，確保清晰可見 */
+
+body.has-custom-background .container > * {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+body.has-custom-background .title {
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: blur(10px);
+    padding: 15px 20px;
+    border-radius: 15px;
+    margin-bottom: 20px;
+}
+
+body.has-custom-background .user-buttons,
+body.has-custom-background .category-section,
+body.has-custom-background .time-section,
+body.has-custom-background .timer-circle,
+body.has-custom-background .control-buttons,
+body.has-custom-background .parent-live-status,
+body.has-custom-background .stats-container {
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    padding: 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+}
+
+/* 深色模式的自訂背景優化 */
+[data-theme="dark"].has-custom-background .container > * {
+    background: rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"].has-custom-background .title {
+    background: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="dark"].has-custom-background .user-buttons,
+[data-theme="dark"].has-custom-background .category-section,
+[data-theme="dark"].has-custom-background .time-section,
+[data-theme="dark"].has-custom-background .timer-circle,
+[data-theme="dark"].has-custom-background .control-buttons,
+[data-theme="dark"].has-custom-background .parent-live-status,
+[data-theme="dark"].has-custom-background .stats-container {
+    background: rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}

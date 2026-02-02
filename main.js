@@ -246,11 +246,8 @@ function setupAutoUpdater() {
     }
   });
 
-  // 應用程式啟動 5 秒後檢查更新
-  setTimeout(() => {
-    console.log('🔍 開始檢查更新...');
-    autoUpdater.checkForUpdates();
-  }, 5000);
+  // 不再自動檢查更新,改由使用者手動點擊「檢查更新」按鈕
+  console.log('✅ 自動更新系統已初始化,等待使用者手動檢查更新');
 
   return autoUpdater;
 }

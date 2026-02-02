@@ -1,5 +1,5 @@
 # 設定變數
-$version = "2.0.0-beta.5"
+$version = "2.0.0-beta.8"
 $repoOwner = "lingoota"
 $repoName = "timer-app"
 $tagName = "v$version"
@@ -14,23 +14,46 @@ if (-not $token) {
 # 建立 Release
 Write-Host "正在建立 GitHub Release $tagName..."
 $releaseBody = @"
-## ✨ 新功能
+## 🎨 重大改進
 
-- 加入完整的自動更新 UI 通知系統
-  - 發現新版本時顯示通知卡片
-  - 下載進度即時顯示
-  - 安裝完成提示
+### ⬇️ 手動檢查更新功能
+- **新增「檢查更新」按鈕** - 點擊右上角 ⬇️ 按鈕即可手動檢查更新
+- **更穩定可靠** - 取代自動更新,避免不必要的問題
+- **完整更新流程** - 發現新版本 → 下載更新 → 安裝提示
+- **使用者完全掌控** - 自己決定何時更新,不會被打斷
 
-## 🐛 Bug 修復
+### 🖼️ 背景圖片 UI 元素優化
+- **UI 元素半透明背景** - 所有按鈕、卡片、文字區域加上毛玻璃效果背景
+- **完美可讀性** - 背景圖片淡化,UI 元素清晰可見
+- **淺色模式** - UI 元素使用白色半透明背景 (15% 不透明度)
+- **深色模式** - UI 元素使用黑色半透明背景 (40% 不透明度)
+- **毛玻璃效果** - backdrop-filter 模糊效果,現代化 UI 設計
 
-- **修復按鈕無法點擊的問題** - 移除重複的 DOMContentLoaded 事件監聽器
-- 所有按鈕（稍後提醒、下載更新、立即重啟、稍後重啟）現在都能正常運作
+### 🖼️ 背景圖片功能 (延續 beta.6)
+- 品瑜和品榕可以各自設定專屬背景圖片
+- 支援 PNG 和 JPG 格式
+- 最大 5MB 圖片大小
+- 右鍵點擊背景按鈕可重置為預設背景
+- 切換使用者時自動載入對應背景
+
+### 使用方式
+1. 點擊右上角 🖼️ 按鈕選擇背景圖片
+2. 點擊右上角 ⬇️ 按鈕檢查更新
+3. 右鍵點擊 🖼️ 按鈕可重置背景
 
 ## 📦 安裝說明
 
-1. 下載 ``時間計算器 Setup $version.exe``
+1. 下載 ``time-calculator-setup-$version.exe``
 2. 執行安裝程式
-3. 未來版本將自動通知更新
+3. 安裝完成後,可使用「檢查更新」功能隨時更新
+
+## 🔧 技術改進
+
+- 手動檢查更新機制,更穩定可靠
+- 背景圖片半透明遮罩 (淺色 30%、深色 40%)
+- UI 元素獨立半透明背景 + 毛玻璃效果
+- 自動偵測深色/淺色模式並套用對應樣式
+- 完整的更新下載與安裝 UI 系統
 
 ---
 
@@ -39,7 +62,7 @@ $releaseBody = @"
 
 $releaseData = @{
     tag_name = $tagName
-    name = "$tagName - 修復自動更新按鈕功能"
+    name = "$tagName - 手動檢查更新 + UI 優化"
     body = $releaseBody
     prerelease = $true
 } | ConvertTo-Json -Depth 10
@@ -65,9 +88,9 @@ try {
 
 # 上傳檔案
 $files = @(
-    "dist/時間計算器 Setup $version.exe",
+    "dist/time-calculator-setup-$version.exe",
     "dist/latest.yml",
-    "dist/時間計算器 Setup $version.exe.blockmap"
+    "dist/time-calculator-setup-$version.exe.blockmap"
 )
 
 foreach ($file in $files) {

@@ -71,13 +71,22 @@
             <button id="charts-btn" class="feature-btn" title="統計圖表">
                 📈
             </button>
+            <button id="check-update-btn" class="feature-btn" title="檢查更新">
+                ⬇️
+            </button>
             <button id="theme-toggle" class="feature-btn" title="深色/淺色模式">
                 🌙
+            </button>
+            <button id="background-btn" class="feature-btn" title="選擇背景圖片">
+                🖼️
             </button>
             <button id="user-settings" class="feature-btn" title="切換用戶">
                 👤
             </button>
         </div>
+
+        <!-- 隱藏的檔案選擇器 -->
+        <input type="file" id="background-file-input" accept="image/png,image/jpeg,image/jpg" style="display: none;">
         
         <!-- 標題 -->
         <h1 class="title">電腦使用時間</h1>
@@ -400,5 +409,8 @@
 
     <!-- 主程式 -->
     <script src="renderer.js"></script>
+
+    <!-- 背景圖片功能 -->
+    <script src="background.js"></script>
 </body>
 </html>
