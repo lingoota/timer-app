@@ -1,6 +1,22 @@
 {
-  "description": "時間追蹤器專案 - Claude Code 專案設定",
+  "permissions": {
+    "allow": [
+      "Read(//e/Claude code workspace/Projects/timer-app-project/**)",
+      "Bash(node_modules/.bin/electron --version)",
+      "Bash(node -e \"console.log\\(require\\(''electron''\\)\\)\")",
+      "Bash(node_modules/electron/dist/electron.exe --version)",
+      "Bash(node -e \"const path = require\\(''electron''\\); console.log\\(''Electron binary:'', path\\);\")",
+      "Bash(node_modules/electron/dist/electron.exe --no-sandbox -e \"console.log\\(''Electron:'', process.versions.electron, ''Node:'', process.versions.node\\)\")",
+      "Bash(node -e \":*)",
+      "Bash(node -e \"const pkg = require\\(''./package.json''\\); console.log\\(''main:'', pkg.main\\)\")",
+      "Read(//e/Claude code workspace/Projects/timer-app-project/family-version/$LOCALAPPDATA/electron/**)"
+    ],
+    "additionalDirectories": [
+      "e:\\Claude code workspace\\Projects\\timer-app-project"
+    ]
+  },
   "language": "zh-TW",
+  "description": "時間追蹤器專案 - Claude Code 專案設定",
   "environment": {
     "os": "Windows 11",
     "subsystem": "WSL",
@@ -46,7 +62,7 @@
   },
   "custom_commands": {
     "continue": "/繼續",
-    "status": "/狀態", 
+    "status": "/狀態",
     "complete": "/完成",
     "pause": "/暫停",
     "push": "/推送"

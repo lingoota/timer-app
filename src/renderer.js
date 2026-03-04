@@ -18,9 +18,12 @@ document.addEventListener('DOMContentLoaded', function() {
         userSelectionOverlay: document.getElementById('user-selection-overlay'),
         selectUser1Btn: document.getElementById('select-user1'),
         selectUser2Btn: document.getElementById('select-user2'),
-        rememberUserCheckbox: document.getElementById('remember-user'),
         currentUserName: document.getElementById('current-user-name'),
         userSettingsBtn: document.getElementById('user-settings'),
+        // 計時提醒相關
+        timerReminderOverlay: document.getElementById('timer-reminder-overlay'),
+        reminderStartTimerBtn: document.getElementById('reminder-start-timer'),
+        reminderSnoozeBtn: document.getElementById('reminder-snooze'),
         user1Total: document.getElementById('user1-total'),
         user2Total: document.getElementById('user2-total'),
         user1Sessions: document.getElementById('user1-sessions'),
@@ -58,6 +61,8 @@ document.addEventListener('DOMContentLoaded', function() {
         container: document.querySelector('.container'),
         alarmStopButton: document.getElementById('alarm-stop-button'),
         stopAlarmBtn: document.getElementById('stop-alarm-btn'),
+        settingsToggle: document.getElementById('settings-toggle'),
+        settingsPanel: document.getElementById('settings-panel'),
     };
     
     // 狀態變數
@@ -93,7 +98,7 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     // 進度條設定
-    const radius = 115;
+    const radius = 95;
     const circumference = 2 * Math.PI * radius;
     dom.progressBar.style.strokeDasharray = circumference;
     dom.progressBar.style.strokeDashoffset = circumference;
@@ -252,27 +257,47 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // 齒輪設定面板展開/收折
+    if (dom.settingsToggle && dom.settingsPanel) {
+        dom.settingsToggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dom.settingsPanel.classList.toggle('hidden');
+        });
+    }
+
+    // 點擊面板外部 → 收折面板
+    document.addEventListener('click', function(e) {
+        if (!dom.settingsPanel.classList.contains('hidden')) {
+            // 檢查點擊是否在整個 settings-wrapper 內（包含齒輪按鈕和面板）
+            const settingsWrapper = dom.settingsToggle ? dom.settingsToggle.closest('.settings-wrapper') : null;
+            if (settingsWrapper && !settingsWrapper.contains(e.target)) {
+                dom.settingsPanel.classList.add('hidden');
+            }
+        }
+    });
+
     // 聲音控制
     dom.soundToggle.addEventListener('click', function() {
         state.soundEnabled = !state.soundEnabled;
         if (state.soundEnabled) {
-            dom.soundToggle.textContent = '🔊';
+            dom.soundToggle.innerHTML = '🔊<span class="feature-label">聲音</span>';
             dom.soundToggle.classList.remove('muted');
             showToast('聲音已開啟');
         } else {
-            dom.soundToggle.textContent = '🔇';
+            dom.soundToggle.innerHTML = '🔇<span class="feature-label">靜音</span>';
             dom.soundToggle.classList.add('muted');
             showToast('聲音已關閉');
         }
         localStorage.setItem('soundEnabled', state.soundEnabled);
     });
-    
+
     // 從本地存儲載入聲音設定
     const savedSoundSetting = localStorage.getItem('soundEnabled');
     if (savedSoundSetting !== null) {
         state.soundEnabled = savedSoundSetting === 'true';
         if (!state.soundEnabled) {
-            dom.soundToggle.textContent = '🔇';
+            dom.soundToggle.innerHTML = '🔇<span class="feature-label">靜音</span>';
             dom.soundToggle.classList.add('muted');
         }
     }
@@ -1079,12 +1104,9 @@ document.addEventListener('DOMContentLoaded', function() {
             state.user2TotalTime = todayStats.pinrong.totalTime;
             state.user2CategoryTime = todayStats.pinrong.activities;
 
-            // 從 Firebase 取得使用者統計（計時次數）
-            const pinyuStats = await getUserStats('pinyu');
-            const pinrongStats = await getUserStats('pinrong');
-
-            state.user1SessionCount = pinyuStats.timerCount || 0;
-            state.user2SessionCount = pinrongStats.timerCount || 0;
+            // 從今天的活動記錄計算當天計時次數（records 陣列的長度）
+            state.user1SessionCount = todayStats.pinyu.records.length;
+            state.user2SessionCount = todayStats.pinrong.records.length;
 
             console.log('Firebase 同步完成:', {
                 user1: { time: state.user1TotalTime, sessions: state.user1SessionCount },
@@ -1567,7 +1589,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         }
         document.documentElement.setAttribute('data-theme', state.isDarkMode ? 'dark' : 'light');
-        dom.themeToggle.textContent = state.isDarkMode ? '☀️' : '🌙';
+        dom.themeToggle.innerHTML = state.isDarkMode ? '☀️<span class="feature-label">淺色</span>' : '🌙<span class="feature-label">主題</span>';
     }
     
     // 快捷鍵處理函數
@@ -1692,38 +1714,49 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // === 用戶選擇功能 ===
-    
-    // 初始化用戶選擇
+    // === 身份綁定系統 ===
+
+    // 初始化用戶選擇（身份綁定）
     function initializeUserSelection() {
-        console.log('=== 初始化用戶選擇功能 ===');
-        
-        // 檢查DOM元素
-        console.log('檢查DOM元素:');
-        console.log('userSelectionOverlay:', !!dom.userSelectionOverlay);
-        console.log('selectUser1Btn:', !!dom.selectUser1Btn);
-        console.log('selectUser2Btn:', !!dom.selectUser2Btn);
-        console.log('userSettingsBtn:', !!dom.userSettingsBtn);
-        console.log('currentUserName:', !!dom.currentUserName);
-        
-        // 檢查是否有記住的用戶
-        const rememberedUser = localStorage.getItem('rememberedUser');
-        console.log('記住的用戶:', rememberedUser);
-        
-        if (rememberedUser) {
-            // 如果有記住的用戶，直接設置並隱藏選擇界面
-            console.log('設置記住的用戶:', rememberedUser);
-            setSelectedUser(rememberedUser);
+        console.log('=== 初始化身份綁定系統 ===');
+
+        // 優先檢查新的 installedUser，再向下相容舊的 rememberedUser
+        let installedUser = localStorage.getItem('installedUser');
+        if (!installedUser) {
+            const rememberedUser = localStorage.getItem('rememberedUser');
+            if (rememberedUser) {
+                // 將舊的 rememberedUser 遷移為 installedUser
+                console.log('🔄 遷移舊的 rememberedUser:', rememberedUser);
+                localStorage.setItem('installedUser', rememberedUser);
+                localStorage.removeItem('rememberedUser');
+                installedUser = rememberedUser;
+            }
+        }
+        console.log('已綁定身份:', installedUser);
+
+        if (installedUser) {
+            // 已有綁定身份，直接設定
+            setSelectedUser(installedUser);
             hideUserSelection();
+
+            // 通知主進程身份（用於閒置偵測）
+            window.api.send('user-identity', installedUser);
+
+            // 小孩身份才定期回報計時狀態
+            if (installedUser === 'user1' || installedUser === 'user2') {
+                startTimerStatusReporting();
+            }
         } else {
-            // 沒有記住的用戶，顯示選擇界面
-            console.log('顯示用戶選擇界面');
+            // 首次使用，顯示身份選擇
+            console.log('👋 首次使用，顯示身份選擇');
             showUserSelection();
         }
-        
+
         // 綁定事件監聽器
         setupUserSelectionEvents();
-        console.log('用戶選擇初始化完成');
+        // 綁定提醒對話框事件
+        setupReminderEvents();
+        console.log('身份綁定初始化完成');
     }
     
     // 顯示用戶選擇界面
@@ -2002,16 +2035,17 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 設置用戶選擇事件監聽器
     function setupUserSelectionEvents() {
-        // 用戶選擇按鈕
+        // 品瑜按鈕
         if (dom.selectUser1Btn) {
             dom.selectUser1Btn.addEventListener('click', () => {
-                selectUserAndRemember('user1');
+                selectAndBindIdentity('user1');
             });
         }
 
+        // 品榕按鈕
         if (dom.selectUser2Btn) {
             dom.selectUser2Btn.addEventListener('click', () => {
-                selectUserAndRemember('user2');
+                selectAndBindIdentity('user2');
             });
         }
 
@@ -2019,43 +2053,94 @@ document.addEventListener('DOMContentLoaded', function() {
         const parentBtn = document.getElementById('select-parent');
         if (parentBtn) {
             parentBtn.addEventListener('click', () => {
-                selectUserAndRemember('parent');
+                selectAndBindIdentity('parent');
             });
         }
-        
-        // 用戶設定按鈕（重新選擇用戶）
+
+        // 用戶設定按鈕（切換使用者）
         if (dom.userSettingsBtn) {
-            console.log('🔧 用戶設定按鈕找到，綁定點擊事件');
             dom.userSettingsBtn.addEventListener('click', () => {
-                console.log('👤 用戶設定按鈕被點擊');
-                showUserSelection();
+                console.log('👤 用戶設定按鈕被點擊，重新顯示身份選擇');
+                clearInstalledUser();
             });
-        } else {
-            console.log('❌ 用戶設定按鈕未找到');
         }
     }
-    
-    // 選擇用戶並記憶
-    function selectUserAndRemember(user) {
-        // 設置選中的用戶
-        setSelectedUser(user);
-        
-        // 如果勾選了記住選擇，保存到本地存儲
-        if (dom.rememberUserCheckbox.checked) {
-            localStorage.setItem('rememberedUser', user);
-            showToast('已記住用戶選擇');
-        }
-        
-        // 隱藏選擇界面
+
+    // 選擇並綁定身份
+    function selectAndBindIdentity(identity) {
+        console.log('🔒 綁定身份:', identity);
+
+        // 永久儲存
+        localStorage.setItem('installedUser', identity);
+
+        // 設定開機自啟動（小孩身份才啟用）
+        const isChild = (identity === 'user1' || identity === 'user2');
+        window.api.send('set-auto-launch', isChild);
+
+        // 設定用戶
+        setSelectedUser(identity);
         hideUserSelection();
+
+        // 通知主進程身份
+        window.api.send('user-identity', identity);
+
+        // 小孩身份才回報計時狀態
+        if (isChild) {
+            startTimerStatusReporting();
+        }
+
+        const nameMap = { user1: '品瑜', user2: '品榕', parent: '家長模式' };
+        showToast(`已綁定身份：${nameMap[identity]}`);
     }
-    
-    // 清除記住的用戶（用於重新選擇）
-    function clearRememberedUser() {
-        localStorage.removeItem('rememberedUser');
+
+    // 清除已綁定的身份（用於切換使用者）
+    function clearInstalledUser() {
+        localStorage.removeItem('installedUser');
         state.selectedUser = null;
-        dom.currentUserName.textContent = '未選擇';
+        if (dom.currentUserName) dom.currentUserName.textContent = '未選擇';
         showUserSelection();
+    }
+
+    // 定期回報計時狀態給主進程（防止重複啟動）
+    let timerStatusInterval = null;
+    function startTimerStatusReporting() {
+        if (timerStatusInterval) return;
+        timerStatusInterval = setInterval(() => {
+            window.api.send('timer-running-status', state.isRunning);
+        }, 3000);
+    }
+
+    // === 計時提醒系統 ===
+
+    // 綁定提醒對話框事件
+    function setupReminderEvents() {
+        // 監聽主進程的提醒事件
+        window.api.on('show-timer-reminder', () => {
+            console.log('⏰ 收到計時提醒');
+            if (dom.timerReminderOverlay) {
+                dom.timerReminderOverlay.classList.remove('hidden');
+            }
+        });
+
+        // 「開始計時」按鈕
+        if (dom.reminderStartTimerBtn) {
+            dom.reminderStartTimerBtn.addEventListener('click', () => {
+                if (dom.timerReminderOverlay) {
+                    dom.timerReminderOverlay.classList.add('hidden');
+                }
+            });
+        }
+
+        // 「稍後提醒」按鈕
+        if (dom.reminderSnoozeBtn) {
+            dom.reminderSnoozeBtn.addEventListener('click', () => {
+                if (dom.timerReminderOverlay) {
+                    dom.timerReminderOverlay.classList.add('hidden');
+                }
+                window.api.send('snooze-reminder');
+                showToast('5 分鐘後會再提醒你');
+            });
+        }
     }
     
     // 啟動冷卻期更新定時器

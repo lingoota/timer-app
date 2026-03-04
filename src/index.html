@@ -8,38 +8,94 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- 用戶選擇覆蓋層 -->
+    <!-- 整頁背景遮罩層 -->
+    <div id="bg-overlay" class="bg-overlay"></div>
+
+    <!-- 首次設定 — 身份選擇覆蓋層 -->
     <div id="user-selection-overlay" class="user-selection-overlay hidden">
         <div class="user-selection-modal">
-            <h2 class="modal-title">歡迎使用電腦時間追蹤器</h2>
-            <p class="modal-subtitle">請選擇你的身份</p>
-            
-            <div class="user-selection-buttons">
-                <button id="select-user1" class="user-selection-btn" data-user="user1">
-                    <div class="user-avatar">👧</div>
-                    <div class="user-name">品瑜</div>
+            <h2 class="modal-title">首次設定 — 請選擇你的身份</h2>
+            <p class="modal-subtitle">此設定會綁定這台電腦，之後可在設定中切換</p>
+
+            <div class="identity-buttons">
+                <button id="select-user1" class="identity-btn identity-user1" data-user="user1">
+                    <span class="identity-icon">🧒</span>
+                    <span class="identity-name">品瑜</span>
                 </button>
-                <button id="select-user2" class="user-selection-btn" data-user="user2">
-                    <div class="user-avatar">👧</div>
-                    <div class="user-name">品榕</div>
+                <button id="select-user2" class="identity-btn identity-user2" data-user="user2">
+                    <span class="identity-icon">👧</span>
+                    <span class="identity-name">品榕</span>
                 </button>
-                <button id="select-parent" class="user-selection-btn parent-btn" data-user="parent">
-                    <div class="user-avatar">👨‍👩‍👧‍👧</div>
-                    <div class="user-name">家長模式</div>
-                    <div class="user-subtitle">（觀察模式）</div>
+                <button id="select-parent" class="identity-btn identity-parent" data-user="parent">
+                    <span class="identity-icon">👨‍👩‍👧‍👦</span>
+                    <span class="identity-name">家長模式</span>
                 </button>
             </div>
-            
-            <div class="remember-choice">
-                <label class="remember-label">
-                    <input type="checkbox" id="remember-user" checked>
-                    <span class="checkmark"></span>
-                    記住我的選擇
-                </label>
+        </div>
+    </div>
+
+    <!-- 計時提醒對話框 -->
+    <div id="timer-reminder-overlay" class="user-selection-overlay hidden">
+        <div class="user-selection-modal reminder-modal">
+            <div class="reminder-icon">⏰</div>
+            <h2 class="modal-title">還沒開始計時喔！</h2>
+            <p class="modal-subtitle">你已經使用電腦超過 1 分鐘了，還沒開始計時喔！</p>
+
+            <div class="reminder-buttons">
+                <button id="reminder-start-timer" class="reminder-start-btn">
+                    ▶️ 開始計時
+                </button>
+                <button id="reminder-snooze" class="reminder-snooze-btn">
+                    💤 稍後提醒（5分鐘後）
+                </button>
             </div>
-            
-            <div class="modal-note">
-                下次可在設定中修改預設用戶
+        </div>
+    </div>
+
+    <!-- 齒輪設定面板（獨立於 container 之外，避免被遮擋） -->
+    <div class="settings-wrapper">
+        <button id="settings-toggle" class="settings-toggle-btn" title="設定">⚙️</button>
+        <div id="settings-panel" class="settings-panel hidden">
+                <div class="settings-panel-grid">
+                    <button id="sound-toggle" class="feature-btn sound-toggle" title="聲音開關">
+                        🔊
+                        <span class="feature-label">聲音</span>
+                    </button>
+                    <button id="refresh-btn" class="feature-btn" title="重新載入">
+                        🔄
+                        <span class="feature-label">重載</span>
+                    </button>
+                    <button id="export-btn" class="feature-btn" title="匯出數據">
+                        📊
+                        <span class="feature-label">匯出</span>
+                    </button>
+                    <button id="charts-btn" class="feature-btn" title="統計圖表">
+                        📈
+                        <span class="feature-label">圖表</span>
+                    </button>
+                    <button id="check-update-btn" class="feature-btn" title="檢查更新">
+                        ⬇️
+                        <span class="feature-label">更新</span>
+                    </button>
+                    <button id="theme-toggle" class="feature-btn" title="深色/淺色模式">
+                        🌙
+                        <span class="feature-label">主題</span>
+                    </button>
+                    <button id="background-btn" class="feature-btn" title="選擇背景圖片">
+                        🖼️
+                        <span class="feature-label">背景</span>
+                    </button>
+                    <button id="user-settings" class="feature-btn" title="切換用戶">
+                        👤
+                        <span class="feature-label">用戶</span>
+                    </button>
+                </div>
+                <!-- 背景透明度滑桿（移入面板內） -->
+                <div id="bg-opacity-control" class="bg-opacity-control hidden">
+                    <label class="bg-opacity-label">背景遮罩</label>
+                    <input type="range" id="bg-opacity-slider" class="bg-opacity-slider" min="0" max="80" value="35" step="5">
+                    <span id="bg-opacity-value" class="bg-opacity-value">35%</span>
+                </div>
             </div>
         </div>
     </div>
@@ -49,39 +105,11 @@
         <div id="achievement-badge" class="achievement-badge">
             <span id="achievement-text">🏆 專注王者!</span>
         </div>
-        
+
         <!-- 停止警報按鈕 -->
         <div id="alarm-stop-button" class="alarm-stop-button hidden">
             <button id="stop-alarm-btn" class="stop-alarm-btn">
                 🔇 停止警報
-            </button>
-        </div>
-        
-        <!-- 功能按鈕 -->
-        <div class="feature-buttons">
-            <button id="sound-toggle" class="feature-btn sound-toggle" title="聲音開關">
-                🔊
-            </button>
-            <button id="refresh-btn" class="feature-btn" title="重新載入">
-                🔄
-            </button>
-            <button id="export-btn" class="feature-btn" title="匯出數據">
-                📊
-            </button>
-            <button id="charts-btn" class="feature-btn" title="統計圖表">
-                📈
-            </button>
-            <button id="check-update-btn" class="feature-btn" title="檢查更新">
-                ⬇️
-            </button>
-            <button id="theme-toggle" class="feature-btn" title="深色/淺色模式">
-                🌙
-            </button>
-            <button id="background-btn" class="feature-btn" title="選擇背景圖片">
-                🖼️
-            </button>
-            <button id="user-settings" class="feature-btn" title="切換用戶">
-                👤
             </button>
         </div>
 
@@ -136,8 +164,8 @@
         <!-- 計時器圓圈 -->
         <div class="timer-circle">
             <svg class="progress-ring">
-                <circle class="progress-circle" cx="135" cy="135" r="115"></circle>
-                <circle id="progress-bar" class="progress-bar" cx="135" cy="135" r="115"></circle>
+                <circle class="progress-circle" cx="110" cy="110" r="95"></circle>
+                <circle id="progress-bar" class="progress-bar" cx="110" cy="110" r="95"></circle>
             </svg>
             
             <div id="time-display" class="time-display">00:00</div>
@@ -278,49 +306,6 @@
                         <div class="timeline-info">顯示今日每小時累計使用時間</div>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- 自動更新通知 UI -->
-    <!-- 1. 發現新版本通知 -->
-    <div id="update-notification" class="update-notification" style="display: none;">
-        <div class="update-content">
-            <div class="update-icon">🔄</div>
-            <div class="update-text">
-                <div class="update-title">發現新版本</div>
-                <div class="update-version"></div>
-                <div class="update-message"></div>
-            </div>
-            <div class="update-actions">
-                <button id="download-update-btn" class="btn-primary">下載更新</button>
-                <button id="dismiss-update-btn" class="btn-secondary">稍後提醒</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 2. 下載進度顯示 -->
-    <div id="download-progress" class="download-progress" style="display: none;">
-        <div class="progress-content">
-            <div class="progress-text">正在下載更新...</div>
-            <div class="progress-bar">
-                <div class="progress-fill"></div>
-            </div>
-            <div class="progress-percent">0%</div>
-        </div>
-    </div>
-
-    <!-- 3. 安裝提示通知 -->
-    <div id="install-notification" class="install-notification" style="display: none;">
-        <div class="install-content">
-            <div class="install-icon">✅</div>
-            <div class="install-text">
-                <div class="install-title">更新已下載完成</div>
-                <div class="install-message">重啟應用程式以安裝更新</div>
-            </div>
-            <div class="install-actions">
-                <button id="install-now-btn" class="btn-primary">立即重啟</button>
-                <button id="install-later-btn" class="btn-secondary">稍後重啟</button>
             </div>
         </div>
     </div>

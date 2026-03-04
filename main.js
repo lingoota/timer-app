@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, screen, ipcMain, Tray, globalShortcut } = require('electron');
+const { app, BrowserWindow, Menu, screen, ipcMain, Tray, globalShortcut, powerMonitor } = require('electron');
 const path = require('path');
 const axios = require('axios');
 
@@ -16,6 +16,13 @@ let isMinimized = false;
 let originalBounds = null;
 let tray = null;
 let forceQuit = false;
+
+// 閒置偵測相關
+let currentUserIdentity = null; // 'user1' | 'user2' | 'parent'
+let isTimerCurrentlyRunning = false;
+let activeSeconds = 0;
+let reminderCooldownUntil = 0;
+let activityCheckInterval = null;
 
 function createWindow() {
   // 獲取螢幕尺寸
@@ -623,4 +630,84 @@ function setupIpcHandlers() {
       global.autoUpdater.checkForUpdates();
     }
   });
+
+  // === 開機自啟動 + 閒置偵測 IPC ===
+
+  // 設定開機自啟動
+  ipcMain.on('set-auto-launch', (event, enabled) => {
+    console.log('⚙️ 設定開機自啟動:', enabled);
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      path: process.execPath
+    });
+  });
+
+  // 渲染進程回報當前用戶身份
+  ipcMain.on('user-identity', (event, identity) => {
+    console.log('👤 收到用戶身份:', identity);
+    currentUserIdentity = identity;
+
+    // 小孩身份才啟動閒置偵測
+    if (identity === 'user1' || identity === 'user2') {
+      setupActivityReminder();
+    } else {
+      stopActivityReminder();
+    }
+  });
+
+  // 渲染進程回報計時狀態
+  ipcMain.on('timer-running-status', (event, isRunning) => {
+    isTimerCurrentlyRunning = isRunning;
+    if (isRunning) {
+      activeSeconds = 0;
+    }
+  });
+
+  // 使用者點「稍後提醒」
+  ipcMain.on('snooze-reminder', (event) => {
+    console.log('💤 稍後提醒，冷卻 5 分鐘');
+    reminderCooldownUntil = Date.now() + 5 * 60 * 1000;
+    activeSeconds = 0;
+  });
+}
+
+// 啟動活動偵測提醒
+function setupActivityReminder() {
+  if (activityCheckInterval) return;
+
+  console.log('🔍 啟動活動偵測提醒');
+  activityCheckInterval = setInterval(() => {
+    const idleTime = powerMonitor.getSystemIdleTime();
+
+    if (idleTime < 5) {
+      activeSeconds += 5;
+    } else {
+      activeSeconds = 0;
+    }
+
+    if (
+      activeSeconds >= 60 &&
+      !isTimerCurrentlyRunning &&
+      (currentUserIdentity === 'user1' || currentUserIdentity === 'user2') &&
+      Date.now() > reminderCooldownUntil
+    ) {
+      console.log('⏰ 偵測到使用電腦但未計時，發送提醒');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.focus();
+        mainWindow.webContents.send('show-timer-reminder');
+      }
+      reminderCooldownUntil = Date.now() + 5 * 60 * 1000;
+      activeSeconds = 0;
+    }
+  }, 5000);
+}
+
+// 停止活動偵測
+function stopActivityReminder() {
+  if (activityCheckInterval) {
+    clearInterval(activityCheckInterval);
+    activityCheckInterval = null;
+    console.log('🛑 停止活動偵測提醒');
+  }
 }
