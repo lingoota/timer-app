@@ -43,9 +43,9 @@ family-version/
 │   ├── firebase-helpers.js   # Firebase 操作函數
 │   └── background.js         # 背景圖片功能
 ├── dist/                     # 建置輸出
-├── todo.md                   # 待辦清單
-├── 專案概況.md                # 專案狀態總覽
-├── 需求規格與指令.md           # 需求與指令記錄
+├── todo.md                   # 待辦清單與當前工作重點
+├── 專案概況.md                # 專案重大進程與版本里程碑
+├── 功能架構.md                # 簡潔功能架構圖（功能模組、IPC、資料儲存）
 └── CLAUDE.md                 # 本檔案
 ```
 
