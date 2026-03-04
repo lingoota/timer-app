@@ -329,6 +329,14 @@ app.whenReady().then(() => {
 
   // 將 autoUpdater 設為全域變數，供 IPC handler 使用
   global.autoUpdater = autoUpdater;
+
+  // 啟動後延遲 5 秒自動檢查更新（避免影響啟動速度）
+  setTimeout(() => {
+    if (global.autoUpdater) {
+      console.log('啟動自動檢查更新...');
+      global.autoUpdater.checkForUpdates();
+    }
+  }, 5000);
 });
 
 // 當所有窗口關閉時的處理
