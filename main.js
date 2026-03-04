@@ -13,8 +13,8 @@ if (app && typeof app.disableHardwareAcceleration === 'function') {
 
 // 保持對window對象的全局引用，避免被垃圾回收
 let mainWindow;
+let miniWindow = null; // 迷你視窗
 let isMinimized = false;
-let originalBounds = null;
 let tray = null;
 let forceQuit = false;
 
@@ -42,7 +42,12 @@ function getWindowStatePath() {
 function loadWindowState() {
   try {
     const data = fs.readFileSync(getWindowStatePath(), 'utf8');
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    // 向下相容：舊格式是直接存 bounds 物件（有 width 屬性），新格式是 { main: {...}, mini: {...} }
+    if (parsed && parsed.width) {
+      return { main: parsed };
+    }
+    return parsed;
   } catch (e) {
     return null;
   }
@@ -52,7 +57,9 @@ function saveWindowState() {
   if (!mainWindow || mainWindow.isDestroyed() || isMinimized) return;
   try {
     const bounds = mainWindow.getBounds();
-    fs.writeFileSync(getWindowStatePath(), JSON.stringify(bounds));
+    const existing = loadWindowState() || {};
+    existing.main = bounds;
+    fs.writeFileSync(getWindowStatePath(), JSON.stringify(existing));
   } catch (e) {
     console.error('儲存視窗狀態失敗:', e);
   }
@@ -64,12 +71,12 @@ function createWindow() {
 
   let windowWidth, windowHeight, windowX, windowY;
 
-  if (savedState) {
+  if (savedState && savedState.main) {
     // 使用上次儲存的大小和位置
-    windowWidth = savedState.width;
-    windowHeight = savedState.height;
-    windowX = savedState.x;
-    windowY = savedState.y;
+    windowWidth = savedState.main.width;
+    windowHeight = savedState.main.height;
+    windowX = savedState.main.x;
+    windowY = savedState.main.y;
   } else {
     // 首次啟動，根據螢幕計算預設大小
     const primaryDisplay = screen.getPrimaryDisplay();
@@ -96,7 +103,7 @@ function createWindow() {
   };
 
   // 如果有儲存位置就套用，否則置中
-  if (savedState) {
+  if (savedState && savedState.main) {
     windowOptions.x = windowX;
     windowOptions.y = windowY;
   } else {
@@ -216,30 +223,93 @@ function createTray() {
   });
 }
 
+// 儲存迷你視窗位置
+function saveMiniWindowState(pos) {
+  try {
+    const existing = loadWindowState() || {};
+    existing.mini = pos;
+    fs.writeFileSync(getWindowStatePath(), JSON.stringify(existing));
+  } catch (e) {
+    console.error('儲存迷你視窗位置失敗:', e);
+  }
+}
+
+// 建立迷你視窗
+function createMiniWindow(timeString, userName) {
+  if (miniWindow) return;
+
+  const savedState = loadWindowState();
+  const miniPos = savedState && savedState.mini ? savedState.mini : null;
+
+  const miniOptions = {
+    width: 280,
+    height: 70,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    resizable: false,
+    skipTaskbar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'src', 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  };
+
+  if (miniPos) {
+    miniOptions.x = miniPos.x;
+    miniOptions.y = miniPos.y;
+  }
+
+  miniWindow = new BrowserWindow(miniOptions);
+  miniWindow.loadFile('src/mini-window.html');
+
+  // 視窗載入完成後送初始資料
+  miniWindow.webContents.once('did-finish-load', () => {
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.webContents.send('update-mini-display', timeString, userName);
+    }
+  });
+
+  // 迷你視窗移動時記住位置
+  miniWindow.on('move', () => {
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      const bounds = miniWindow.getBounds();
+      saveMiniWindowState({ x: bounds.x, y: bounds.y });
+    }
+  });
+
+  miniWindow.on('closed', () => {
+    miniWindow = null;
+  });
+
+  // 如果沒有記憶位置，放在螢幕右上角
+  if (!miniPos) {
+    const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
+    miniWindow.setPosition(screenW - 300, 20);
+  }
+
+  console.log('迷你視窗已建立');
+}
+
+// 關閉迷你視窗
+function closeMiniWindow() {
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.close();
+    miniWindow = null;
+  }
+}
+
 // 從迷你模式恢復
 function restoreFromMiniMode() {
-  if (mainWindow && isMinimized && originalBounds) {
-    console.log('恢復迷你模式，從:', mainWindow.getBounds(), '到:', originalBounds);
-    
-    // 恢復原始窗口大小和位置
-    mainWindow.setBounds(originalBounds);
-    
-    // 恢復窗口屬性
-    mainWindow.setAlwaysOnTop(false);
-    mainWindow.setResizable(true);
-    
-    // 恢復正常模式的最小尺寸限制（允許用戶手動縮放）
-    mainWindow.setMinimumSize(400, 500);
-    
-    isMinimized = false;
-    
-    // 只有在窗口可見時才通知渲染進程
-    if (!mainWindow.isDestroyed() && mainWindow.webContents) {
-      mainWindow.webContents.send('timer-restored');
-    }
-    
-    console.log('迷你模式恢復完成');
+  closeMiniWindow();
+  isMinimized = false;
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.show();
+    mainWindow.focus();
+    mainWindow.webContents.send('timer-restored');
   }
+  console.log('迷你模式恢復完成');
 }
 
 // 註冊全局快捷鍵
@@ -549,76 +619,66 @@ function setupIpcHandlers() {
       } else if (actionType === 'minimize') {
         // 最小化按鈕：根據計時狀態決定行為
         if (isTimerRunning) {
-          console.log('計時運行中，進入迷你模式');
-          // 如果計時正在運行，進入迷你模式
+          console.log('計時運行中，進入迷你視窗模式');
           if (!isMinimized) {
-            const primaryDisplay = screen.getPrimaryDisplay();
-            const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
-            
-            // 保存原始窗口大小和位置
-            originalBounds = mainWindow.getBounds();
-            console.log('保存原始窗口:', originalBounds);
-            
-            // 先設置迷你模式的最小尺寸（僅迷你模式使用）
-            console.log('設置迷你模式最小尺寸: 160x60');
-            mainWindow.setMinimumSize(160, 60);
-            
-            // 設置迷你模式：右上角小窗口
-            const newBounds = {
-              x: screenWidth - 160,
-              y: 0,
-              width: 160,
-              height: 60
-            };
-            console.log('設置迷你窗口:', newBounds);
-            mainWindow.setBounds(newBounds);
-            
-            // 驗證實際設置的大小並強制修正
-            setTimeout(() => {
-              const actualBounds = mainWindow.getBounds();
-              console.log('實際迷你模式窗口大小:', actualBounds);
-              
-              // 如果大小不正確，強制重新設置
-              if (actualBounds.width !== 160 || actualBounds.height !== 60) {
-                console.log('迷你模式大小不正確，強制重新設置');
-                mainWindow.setBounds({
-                  x: screenWidth - 160,
-                  y: 0,
-                  width: 160,
-                  height: 60
-                });
-              }
-            }, 100);
-            
-            // 設置窗口屬性
-            mainWindow.setAlwaysOnTop(true);
-            mainWindow.setResizable(false);
-            
-            isMinimized = true;
-            console.log('窗口已設為迷你模式');
-            
-            // 通知渲染進程已進入迷你模式
-            mainWindow.webContents.send('timer-minimized');
-          } else {
-            console.log('已經在迷你模式中');
+            // 請 renderer 提供目前計時資訊，然後開迷你視窗
+            mainWindow.webContents.send('request-mini-mode-data');
           }
         } else {
           console.log('沒有計時，正常最小化到工作列');
-          // 沒有計時，正常最小化到工作列
           mainWindow.minimize();
         }
       }
     }
   });
 
-  // 更新迷你窗口標題
+  // 更新迷你視窗顯示
   ipcMain.on('update-mini-timer', (event, timeLeft, user) => {
-    if (mainWindow && isMinimized) {
+    if (miniWindow && !miniWindow.isDestroyed()) {
       const minutes = Math.floor(timeLeft / 60);
       const seconds = timeLeft % 60;
       const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-      mainWindow.setTitle(`${user} - ${timeString}`);
+      miniWindow.webContents.send('update-mini-display', timeString, user);
     }
+  });
+
+  // 進入迷你模式（renderer 提供計時資料後觸發）
+  ipcMain.on('enter-mini-mode', (event, timeString, userName) => {
+    console.log('進入迷你視窗模式:', timeString, userName);
+    isMinimized = true;
+    createMiniWindow(timeString, userName);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.hide();
+    }
+  });
+
+  // 迷你視窗：暫停
+  ipcMain.on('mini-pause', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('global-shortcut', 'pause');
+    }
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.webContents.send('mini-pause-state', true);
+    }
+  });
+
+  // 迷你視窗：繼續
+  ipcMain.on('mini-resume', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('global-shortcut', 'pause');
+    }
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.webContents.send('mini-pause-state', false);
+    }
+  });
+
+  // 迷你視窗：結束計時
+  ipcMain.on('mini-stop', () => {
+    console.log('迷你視窗請求結束計時');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('global-shortcut', 'stop');
+    }
+    restoreFromMiniMode();
   });
 
   // 計時結束時將窗口置頂
@@ -649,30 +709,10 @@ function setupIpcHandlers() {
     }
   });
 
-  // 處理來自渲染進程的手動恢復請求
-  ipcMain.on('restore-timer', (event) => {
-    console.log('收到手動恢復迷你模式請求');
-    if (mainWindow && isMinimized) {
-      restoreFromMiniMode();
-      mainWindow.show();
-      mainWindow.focus();
-    }
-  });
-
-  // 強制同步迷你模式狀態
-  ipcMain.on('sync-mini-mode-state', (event, rendererMiniMode) => {
-    console.log('同步迷你模式狀態 - 主進程:', isMinimized, '渲染進程:', rendererMiniMode);
-
-    if (isMinimized !== rendererMiniMode) {
-      console.log('檢測到狀態不同步，進行修復');
-      if (rendererMiniMode && !isMinimized) {
-        // 渲染進程認為在迷你模式，但主進程不是
-        isMinimized = true;
-      } else if (!rendererMiniMode && isMinimized) {
-        // 主進程認為在迷你模式，但渲染進程不是
-        restoreFromMiniMode();
-      }
-    }
+  // 處理來自渲染進程的手動恢復請求（從迷你模式退出）
+  ipcMain.on('exit-mini-mode', (event) => {
+    console.log('收到退出迷你模式請求');
+    restoreFromMiniMode();
   });
 
   // 處理自動更新相關的 IPC 事件

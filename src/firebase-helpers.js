@@ -259,24 +259,24 @@ async function getTodayStats() {
  */
 async function updateLiveTimerStatus(userId, timerState) {
     try {
-        const liveStatusRef = firebase.firestore()
-            .collection('live-timer-status')
-            .doc(userId);
+        const { db, functions } = await waitForFirebase();
+        const { doc, setDoc, serverTimestamp } = functions;
+
+        const liveStatusRef = doc(db, 'live-timer-status', userId);
 
         if (timerState.isRunning) {
-            await liveStatusRef.set({
+            await setDoc(liveStatusRef, {
                 isRunning: true,
                 startTime: timerState.startTime,
                 totalDuration: timerState.totalDuration,
                 category: timerState.category,
-                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+                lastUpdate: serverTimestamp()
             });
             console.log(`✅ Firebase: ${userId} 即時計時狀態已更新`);
         } else {
-            // 不在計時時，清除狀態
-            await liveStatusRef.set({
+            await setDoc(liveStatusRef, {
                 isRunning: false,
-                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+                lastUpdate: serverTimestamp()
             });
             console.log(`✅ Firebase: ${userId} 已停止計時`);
         }
@@ -291,15 +291,16 @@ async function updateLiveTimerStatus(userId, timerState) {
  */
 async function getLiveTimerStatus() {
     try {
-        const liveStatusCollection = firebase.firestore().collection('live-timer-status');
+        const { db, functions } = await waitForFirebase();
+        const { doc, getDoc } = functions;
 
         const [pinyuDoc, pinrongDoc] = await Promise.all([
-            liveStatusCollection.doc('pinyu').get(),
-            liveStatusCollection.doc('pinrong').get()
+            getDoc(doc(db, 'live-timer-status', 'pinyu')),
+            getDoc(doc(db, 'live-timer-status', 'pinrong'))
         ]);
 
-        const pinyuStatus = pinyuDoc.exists ? pinyuDoc.data() : { isRunning: false };
-        const pinrongStatus = pinrongDoc.exists ? pinrongDoc.data() : { isRunning: false };
+        const pinyuStatus = pinyuDoc.exists() ? pinyuDoc.data() : { isRunning: false };
+        const pinrongStatus = pinrongDoc.exists() ? pinrongDoc.data() : { isRunning: false };
 
         return {
             pinyu: pinyuStatus,

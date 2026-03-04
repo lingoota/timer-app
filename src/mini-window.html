@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      width: 280px;
+      height: 70px;
+      overflow: hidden;
+      font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+      -webkit-app-region: drag;
+      user-select: none;
+      background: linear-gradient(135deg, #4158D0 0%, #C850C0 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 8px;
+    }
+
+    .user-name {
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 12px;
+      font-weight: 600;
+      min-width: 28px;
+      text-align: center;
+    }
+
+    .time-display {
+      color: white;
+      font-size: 26px;
+      font-weight: 700;
+      font-family: 'Courier New', monospace;
+      flex: 1;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    }
+
+    .controls {
+      display: flex;
+      gap: 6px;
+      -webkit-app-region: no-drag;
+    }
+
+    .btn {
+      width: 34px;
+      height: 34px;
+      border: none;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.2s;
+    }
+
+    .btn:hover {
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .btn:active {
+      background: rgba(255, 255, 255, 0.5);
+    }
+  </style>
+</head>
+<body>
+  <span class="user-name" id="user-name">品瑜</span>
+  <span class="time-display" id="time-display">25:00</span>
+  <div class="controls">
+    <button class="btn" id="pause-btn" title="暫停">⏸</button>
+    <button class="btn" id="stop-btn" title="結束計時">⏹</button>
+  </div>
+
+  <script>
+    const timeDisplay = document.getElementById('time-display');
+    const userNameEl = document.getElementById('user-name');
+    const pauseBtn = document.getElementById('pause-btn');
+    const stopBtn = document.getElementById('stop-btn');
+
+    let isPaused = false;
+
+    // 接收主進程傳來的計時更新
+    window.api.on('update-mini-display', (timeString, userName) => {
+      timeDisplay.textContent = timeString;
+      userNameEl.textContent = userName;
+    });
+
+    // 接收暫停狀態同步
+    window.api.on('mini-pause-state', (paused) => {
+      isPaused = paused;
+      pauseBtn.textContent = isPaused ? '▶' : '⏸';
+      pauseBtn.title = isPaused ? '繼續' : '暫停';
+    });
+
+    // 暫停/繼續按鈕
+    pauseBtn.addEventListener('click', () => {
+      if (isPaused) {
+        window.api.send('mini-resume');
+      } else {
+        window.api.send('mini-pause');
+      }
+    });
+
+    // 結束計時按鈕
+    stopBtn.addEventListener('click', () => {
+      window.api.send('mini-stop');
+    });
+  </script>
+</body>
+</html>

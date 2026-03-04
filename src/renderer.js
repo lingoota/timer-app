@@ -59,9 +59,6 @@ document.addEventListener('DOMContentLoaded', function() {
         dailyChartLegend: document.getElementById('daily-chart-legend'),
         userChartLegend: document.getElementById('user-chart-legend'),
         themeToggle: document.getElementById('theme-toggle'),
-        miniMode: document.getElementById('mini-mode'),
-        miniTimeDisplay: document.getElementById('mini-time-display'),
-        miniUserDisplay: document.getElementById('mini-user-display'),
         container: document.querySelector('.container'),
         alarmStopButton: document.getElementById('alarm-stop-button'),
         stopAlarmBtn: document.getElementById('stop-alarm-btn'),
@@ -154,43 +151,34 @@ document.addEventListener('DOMContentLoaded', function() {
             // 關閉按鈕：隱藏到工具列，不需要界面變化
             console.log('關閉按鈕：窗口將隱藏到工具列');
         } else if (actionType === 'minimize') {
-            // 最小化按鈕：如果在計時，進入迷你模式界面
+            // 最小化按鈕：如果在計時，主進程會開迷你視窗
             if (state.isRunning) {
-                console.log('計時運行中，切換到迷你模式界面');
-                
-                if (!state.isMiniMode) {
-                    // 更新迷你模式顯示
-                    const userName = state.selectedUser === 'user1' ? '品瑜' : '品榕';
-                    dom.miniUserDisplay.textContent = userName;
-                    
-                    const minutes = Math.floor(state.timeLeft / 60);
-                    const seconds = state.timeLeft % 60;
-                    dom.miniTimeDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-                    
-                    // 切換到迷你模式界面
-                    state.isMiniMode = true;
-                    document.body.classList.add('mini-mode-active');
-                    dom.container.classList.add('hidden');
-                    dom.miniMode.classList.remove('hidden');
-                    
-                    console.log('已切換到迷你模式界面');
-                }
+                console.log('計時運行中，主進程將開啟迷你視窗');
             } else {
                 console.log('未在計時，將正常最小化到工作列');
             }
         }
     });
-    
-    // 監聽從迷你模式恢復的事件
+
+    // 主進程請求迷你模式的計時資料
+    window.api.on('request-mini-mode-data', () => {
+        if (state.isRunning && !state.isMiniMode) {
+            const minutes = Math.floor(state.timeLeft / 60);
+            const seconds = state.timeLeft % 60;
+            const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const userName = state.selectedUser === 'user1' ? '品瑜' : '品榕';
+            state.isMiniMode = true;
+            window.api.send('enter-mini-mode', timeString, userName);
+            console.log('已發送迷你模式資料');
+        }
+    });
+
+    // 監聯從迷你模式恢復的事件
     window.api.on('timer-restored', () => {
         console.log('收到恢復正常模式事件');
         if (state.isMiniMode) {
-            // 恢復正常模式界面
             state.isMiniMode = false;
-            document.body.classList.remove('mini-mode-active');
-            dom.miniMode.classList.add('hidden');
-            dom.container.classList.remove('hidden');
-            console.log('已恢復正常模式界面');
+            console.log('已恢復正常模式');
         }
     });
     
@@ -207,6 +195,18 @@ document.addEventListener('DOMContentLoaded', function() {
                 break;
             case 'reset':
                 handleResetShortcut();
+                break;
+            case 'pause':
+                // 迷你視窗的暫停/繼續
+                if (state.isRunning) {
+                    dom.pauseBtn.click();
+                } else if (state.timeLeft > 0 && state.timeLeft < state.totalDuration) {
+                    dom.startBtn.click();
+                }
+                break;
+            case 'stop':
+                // 迷你視窗的結束計時
+                dom.resetBtn.click();
                 break;
         }
     });
@@ -648,11 +648,6 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 迷你模式點擊事件 (點擊返回正常界面)
-    dom.miniMode.addEventListener('click', function() {
-        exitMiniMode();
-    });
-    
     // 防止系統休眠的函數
     function preventSystemSleep() {
         // 使用微小的DOM更新來保持活動狀態
@@ -768,8 +763,8 @@ document.addEventListener('DOMContentLoaded', function() {
         dom.timeDisplay.textContent = timeString;
         
         // 如果在迷你模式中，同時更新迷你顯示和IPC通信
+        // 迷你視窗模式：透過 IPC 更新獨立小視窗的顯示
         if (state.isMiniMode) {
-            dom.miniTimeDisplay.textContent = timeString;
             window.api.send('update-mini-timer', state.timeLeft, state.selectedUser === 'user1' ? '品瑜' : '品榕');
         }
     }
@@ -1614,7 +1609,7 @@ document.addEventListener('DOMContentLoaded', function() {
         state.isDarkMode = !state.isDarkMode;
         document.documentElement.setAttribute('data-theme', state.isDarkMode ? 'dark' : 'light');
         localStorage.setItem('theme', state.isDarkMode ? 'dark' : 'light');
-        dom.themeToggle.textContent = state.isDarkMode ? '☀️' : '���';
+        dom.themeToggle.innerHTML = state.isDarkMode ? "☀️<span class=\"feature-label\">白字</span>" : "🌙<span class=\"feature-label\">黑字</span>";
         // 重新渲染圖表以更新顏色
         if (dom.chartsModal.classList.contains('hidden') === false) {
             renderCharts();
@@ -1630,7 +1625,7 @@ document.addEventListener('DOMContentLoaded', function() {
             state.isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         }
         document.documentElement.setAttribute('data-theme', state.isDarkMode ? 'dark' : 'light');
-        dom.themeToggle.innerHTML = state.isDarkMode ? '☀️<span class="feature-label">淺色</span>' : '🌙<span class="feature-label">主題</span>';
+        dom.themeToggle.innerHTML = state.isDarkMode ? "☀️<span class=\"feature-label\">白字</span>" : "🌙<span class=\"feature-label\">黑字</span>";
     }
     
     // 快捷鍵處理函數
@@ -1654,104 +1649,32 @@ document.addEventListener('DOMContentLoaded', function() {
         dom.resetBtn.click();
     }
     
-    // 迷你模式進入/退出邏輯
+    // 迷你模式進入/退出邏輯（使用獨立迷你視窗）
     function enterMiniMode() {
         if (!state.isMiniMode && state.isRunning) {
-            console.log('請求進入迷你模式');
-            // 通知主進程進入迷你模式
-            window.api.send('check-timer-status', 'minimize');
+            console.log('請求進入迷你視窗模式');
+            const minutes = Math.floor(state.timeLeft / 60);
+            const seconds = state.timeLeft % 60;
+            const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const userName = state.selectedUser === 'user1' ? '品瑜' : '品榕';
+            state.isMiniMode = true;
+            window.api.send('enter-mini-mode', timeString, userName);
         }
     }
-    
+
     function exitMiniMode() {
         if (state.isMiniMode) {
-            console.log('請求退出迷你模式');
-            // 通知主進程恢復正常模式
-            window.api.send('restore-timer');
-        } else {
-            console.log('退出迷你模式請求被忽略 - 不在迷你模式中');
-        }
-    }
-
-    // 強制退出迷你模式（用於錯誤恢復）
-    function forceExitMiniMode() {
-        console.log('強制退出迷你模式');
-        if (state.isMiniMode) {
+            console.log('請求退出迷你視窗模式');
             state.isMiniMode = false;
-            document.body.classList.remove('mini-mode-active');
-            dom.miniMode.classList.add('hidden');
-            dom.container.classList.remove('hidden');
+            window.api.send('exit-mini-mode');
         }
-        // 通知主進程同步狀態
-        window.api.send('sync-mini-mode-state', false);
     }
-
-    // 定期同步迷你模式狀態（防止不同步）
-    function syncMiniModeState() {
-        window.api.send('sync-mini-mode-state', state.isMiniMode);
-    }
-    
-    // 監聽主進程發送的事件
-    window.api.on('timer-minimized', () => {
-        console.log('渲染進程收到 timer-minimized 事件，當前狀態:', state.isMiniMode);
-        if (!state.isMiniMode) {
-            state.isMiniMode = true;
-            document.body.classList.add('mini-mode-active');
-            dom.container.classList.add('hidden');
-            dom.miniMode.classList.remove('hidden');
-            
-            const userName = state.selectedUser === 'user1' ? '品瑜' : '品榕';
-            dom.miniUserDisplay.textContent = userName;
-            updateDisplay(); // 更新迷你模式的時間顯示
-            
-            console.log('迷你模式已激活');
-        } else {
-            console.log('已經在迷你模式中，忽略重複激活');
-        }
-    });
-    
-    window.api.on('timer-restored', () => {
-        console.log('渲染進程收到 timer-restored 事件，當前狀態:', state.isMiniMode);
-        if (state.isMiniMode) {
-            state.isMiniMode = false;
-            document.body.classList.remove('mini-mode-active');
-            dom.miniMode.classList.add('hidden');
-            dom.container.classList.remove('hidden');
-            
-            console.log('迷你模式已恢復為正常模式');
-        } else {
-            console.log('已經在正常模式中，忽略重複恢復');
-        }
-    });
-
-    // 定期同步迷你模式狀態（每30秒檢查一次）
-    setInterval(() => {
-        if (state.isRunning) {
-            syncMiniModeState();
-        }
-    }, 30000);
-
-    // 添加全局錯誤恢復快捷鍵（Ctrl+Shift+X）
-    document.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.shiftKey && e.key === 'X') {
-            console.log('執行迷你模式錯誤恢復');
-            forceExitMiniMode();
-            showToast('已強制退出迷你模式');
-        }
-    });
 
     // 計時結束時確保退出迷你模式
     function ensureExitMiniMode() {
         if (state.isMiniMode) {
-            console.log('計時結束，確保退出迷你模式');
+            console.log('計時結束，退出迷你視窗模式');
             exitMiniMode();
-            // 設置超時強制退出，防止卡住
-            setTimeout(() => {
-                if (state.isMiniMode) {
-                    console.log('迷你模式退出超時，強制退出');
-                    forceExitMiniMode();
-                }
-            }, 2000);
         }
     }
     
