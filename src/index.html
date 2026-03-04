@@ -52,6 +52,24 @@
         </div>
     </div>
 
+    <!-- 冷卻期休息提醒對話框 -->
+    <div id="cooldown-reminder-overlay" class="user-selection-overlay hidden">
+        <div class="user-selection-modal reminder-modal">
+            <div class="reminder-icon">😴</div>
+            <h2 class="modal-title">休息時間還沒結束喔！</h2>
+            <p class="modal-subtitle">讓眼睛休息一下，剩餘時間：</p>
+            <div id="cooldown-remaining-time" class="cooldown-remaining-time">5:00</div>
+            <div class="reminder-buttons">
+                <button id="cooldown-screen-off-btn" class="reminder-start-btn">
+                    🖥️ 關閉螢幕休息
+                </button>
+                <button id="cooldown-dismiss-btn" class="reminder-snooze-btn">
+                    👌 我知道了
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- 齒輪設定面板（獨立於 container 之外，避免被遮擋） -->
     <div class="settings-wrapper">
         <button id="settings-toggle" class="settings-toggle-btn" title="設定">⚙️</button>
@@ -110,6 +128,9 @@
         <div id="alarm-stop-button" class="alarm-stop-button hidden">
             <button id="stop-alarm-btn" class="stop-alarm-btn">
                 🔇 停止警報
+            </button>
+            <button id="screen-off-alarm-btn" class="screen-off-btn">
+                🖥️ 關閉螢幕
             </button>
         </div>
 
@@ -189,7 +210,14 @@
                 </svg>
             </div>
         </div>
-        
+
+        <!-- 關閉螢幕按鈕（計時器旁） -->
+        <div class="screen-off-wrapper">
+            <button id="screen-off-btn" class="screen-off-side-btn" title="關閉螢幕休息">
+                🖥️ 關閉螢幕
+            </button>
+        </div>
+
         <!-- 控制按鈕 -->
         <div class="control-buttons">
             <button id="start-btn" class="control-btn">開始</button>

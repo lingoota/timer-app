@@ -24,6 +24,10 @@ document.addEventListener('DOMContentLoaded', function() {
         timerReminderOverlay: document.getElementById('timer-reminder-overlay'),
         reminderStartTimerBtn: document.getElementById('reminder-start-timer'),
         reminderSnoozeBtn: document.getElementById('reminder-snooze'),
+        cooldownReminderOverlay: document.getElementById('cooldown-reminder-overlay'),
+        cooldownRemainingTime: document.getElementById('cooldown-remaining-time'),
+        cooldownScreenOffBtn: document.getElementById('cooldown-screen-off-btn'),
+        cooldownDismissBtn: document.getElementById('cooldown-dismiss-btn'),
         user1Total: document.getElementById('user1-total'),
         user2Total: document.getElementById('user2-total'),
         user1Sessions: document.getElementById('user1-sessions'),
@@ -61,6 +65,8 @@ document.addEventListener('DOMContentLoaded', function() {
         container: document.querySelector('.container'),
         alarmStopButton: document.getElementById('alarm-stop-button'),
         stopAlarmBtn: document.getElementById('stop-alarm-btn'),
+        screenOffAlarmBtn: document.getElementById('screen-off-alarm-btn'),
+        screenOffBtn: document.getElementById('screen-off-btn'),
         settingsToggle: document.getElementById('settings-toggle'),
         settingsPanel: document.getElementById('settings-panel'),
     };
@@ -624,7 +630,24 @@ document.addEventListener('DOMContentLoaded', function() {
         stopAlarmSound();
         showToast('警報已停止');
     });
-    
+
+    // 關閉螢幕按鈕（警報區域）
+    if (dom.screenOffAlarmBtn) {
+        dom.screenOffAlarmBtn.addEventListener('click', function() {
+            stopAlarmSound();
+            window.api.send('turn-off-screen');
+            showToast('螢幕已關閉，動滑鼠或按鍵盤即可恢復');
+        });
+    }
+
+    // 關閉螢幕按鈕（計時器旁）
+    if (dom.screenOffBtn) {
+        dom.screenOffBtn.addEventListener('click', function() {
+            window.api.send('turn-off-screen');
+            showToast('螢幕已關閉，動滑鼠或按鍵盤即可恢復');
+        });
+    }
+
     // 迷你模式點擊事件 (點擊返回正常界面)
     dom.miniMode.addEventListener('click', function() {
         exitMiniMode();
@@ -709,6 +732,12 @@ document.addEventListener('DOMContentLoaded', function() {
             dom.pauseBtn.disabled = true;
             dom.resetBtn.disabled = false;
             
+            // 更新 Firebase 即時計時狀態（計時完成）
+            const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
+            if (window.updateLiveTimerStatus) {
+                window.updateLiveTimerStatus(userId, { isRunning: false });
+            }
+
             // 通知主進程將窗口置頂
             window.api.send('timer-completed-show-window');
             
@@ -944,6 +973,8 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('手動停止警報，開始冷卻期');
             // 啟動冷卻期更新定時器
             startCooldownUpdate();
+            // 通知主程序開始冷卻期活動偵測
+            window.api.send('cooldown-started');
         }
         
         // 停止警報循環，重置計數器
@@ -2153,8 +2184,55 @@ document.addEventListener('DOMContentLoaded', function() {
                 showToast('5 分鐘後會再提醒你');
             });
         }
+
+        // 冷卻期提醒：關閉螢幕按鈕
+        if (dom.cooldownScreenOffBtn) {
+            dom.cooldownScreenOffBtn.addEventListener('click', () => {
+                window.api.send('turn-off-screen');
+                window.api.send('cooldown-dismiss');
+                if (dom.cooldownReminderOverlay) {
+                    dom.cooldownReminderOverlay.classList.add('hidden');
+                }
+                showToast('螢幕已關閉，動滑鼠或按鍵盤即可恢復');
+            });
+        }
+
+        // 冷卻期提醒：我知道了按鈕
+        if (dom.cooldownDismissBtn) {
+            dom.cooldownDismissBtn.addEventListener('click', () => {
+                window.api.send('cooldown-dismiss');
+                if (dom.cooldownReminderOverlay) {
+                    dom.cooldownReminderOverlay.classList.add('hidden');
+                }
+            });
+        }
     }
-    
+
+    // 冷卻期提醒 IPC 監聽
+    window.api.on('show-cooldown-reminder', (remainingSec) => {
+        if (dom.cooldownReminderOverlay) {
+            const min = Math.floor(remainingSec / 60);
+            const sec = remainingSec % 60;
+            dom.cooldownRemainingTime.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+            dom.cooldownReminderOverlay.classList.remove('hidden');
+        }
+    });
+
+    window.api.on('update-cooldown-time', (remainingSec) => {
+        if (dom.cooldownRemainingTime) {
+            const min = Math.floor(remainingSec / 60);
+            const sec = remainingSec % 60;
+            dom.cooldownRemainingTime.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
+        }
+    });
+
+    window.api.on('cooldown-ended', () => {
+        if (dom.cooldownReminderOverlay) {
+            dom.cooldownReminderOverlay.classList.add('hidden');
+        }
+        showToast('休息時間結束，可以重新計時了！');
+    });
+
     // 啟動冷卻期更新定時器
     function startCooldownUpdate() {
         // 清除可能存在的舊定時器

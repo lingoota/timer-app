@@ -13,10 +13,23 @@
       "Bash(python -X utf8 \"E:\\\\Claude code workspace\\\\Projects\\\\claude截圖工具\\\\screenshot_tool.py\" \"/e/Claude code workspace/Projects/timer-app-project/family-version\")",
       "Read(//e/Claude code workspace/Projects/claude截圖工具/截圖/**)",
       "Bash(powershell -Command \":*)",
-      "Read(//c/Users/lingoota/.claude/**)"
+      "Read(//c/Users/lingoota/.claude/**)",
+      "Bash(curl -sI \"https://github.com/lingoota/timer-app/releases/download/v2.0.0-beta.10/latest.yml\")",
+      "Bash(timeout 8 npx electron .)",
+      "Bash(node -e \"const {app} = require\\(''electron''\\); console.log\\(''app:'', typeof app\\);\")",
+      "Bash(node_modules/.bin/electron.cmd --version)",
+      "Bash(node -e \"console.log\\(require\\(''electron/package.json''\\).version\\)\")",
+      "Bash(node_modules/electron/dist/electron.exe .)",
+      "Bash(node -e \"const e = require\\(''electron''\\); console.log\\(''app:'', typeof e.app\\); console.log\\(''keys:'', Object.keys\\(e\\)\\)\")",
+      "Bash(npm install electron@27.3.11)",
+      "Bash(node --check main.js)",
+      "Bash(node --check src/renderer.js)",
+      "Bash(node --check \"e:/Claude code workspace/Projects/timer-app-project/family-version/src/renderer.js\")",
+      "Bash(node --check src/background.js)"
     ],
     "additionalDirectories": [
-      "e:\\Claude code workspace\\Projects\\timer-app-project"
+      "e:\\Claude code workspace\\Projects\\timer-app-project",
+      "C:\\Users\\lingoota\\.claude"
     ]
   },
   "language": "zh-TW",

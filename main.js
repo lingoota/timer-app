@@ -1,5 +1,6 @@
 const { app, BrowserWindow, Menu, screen, ipcMain, Tray, globalShortcut, powerMonitor } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const axios = require('axios');
 
 // 禁用硬體加速以避免 WSL 環境的 GPU 錯誤
@@ -24,37 +25,85 @@ let activeSeconds = 0;
 let reminderCooldownUntil = 0;
 let activityCheckInterval = null;
 
-function createWindow() {
-  // 獲取螢幕尺寸
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+// 冷卻期活動偵測
+let cooldownEndTime = 0; // 冷卻期結束時間
+let cooldownReminderShowing = false; // 是否正在顯示冷卻期提醒
 
-  // 計算窗口大小（針對 22 吋 1920x1080 螢幕優化）
-  // 寬度：螢幕的 50%（約 960px），最小 800px，最大 1200px
-  const windowWidth = Math.max(800, Math.min(1200, Math.floor(screenWidth * 0.5)));
-  // 高度：螢幕的 90%（約 972px），最小 800px
-  const windowHeight = Math.max(800, Math.floor(screenHeight * 0.9));
+// 視窗狀態儲存/載入（路徑延遲取得，避免 app 未就緒）
+let windowStatePath = null;
+
+function getWindowStatePath() {
+  if (!windowStatePath) {
+    windowStatePath = path.join(app.getPath('userData'), 'window-state.json');
+  }
+  return windowStatePath;
+}
+
+function loadWindowState() {
+  try {
+    const data = fs.readFileSync(getWindowStatePath(), 'utf8');
+    return JSON.parse(data);
+  } catch (e) {
+    return null;
+  }
+}
+
+function saveWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed() || isMinimized) return;
+  try {
+    const bounds = mainWindow.getBounds();
+    fs.writeFileSync(getWindowStatePath(), JSON.stringify(bounds));
+  } catch (e) {
+    console.error('儲存視窗狀態失敗:', e);
+  }
+}
+
+function createWindow() {
+  // 嘗試載入上次的視窗大小
+  const savedState = loadWindowState();
+
+  let windowWidth, windowHeight, windowX, windowY;
+
+  if (savedState) {
+    // 使用上次儲存的大小和位置
+    windowWidth = savedState.width;
+    windowHeight = savedState.height;
+    windowX = savedState.x;
+    windowY = savedState.y;
+  } else {
+    // 首次啟動，根據螢幕計算預設大小
+    const primaryDisplay = screen.getPrimaryDisplay();
+    const { width: screenWidth, height: screenHeight } = primaryDisplay.workAreaSize;
+    windowWidth = Math.max(800, Math.min(1200, Math.floor(screenWidth * 0.5)));
+    windowHeight = Math.max(800, Math.floor(screenHeight * 0.9));
+  }
 
   // 創建瀏覽器窗口
-  mainWindow = new BrowserWindow({
+  const windowOptions = {
     width: windowWidth,
     height: windowHeight,
-    minWidth: 700,  // 正常模式的最小寬度（增加以容納圖表）
-    minHeight: 700,  // 正常模式的最小高度（增加以減少滾動）
-    maxWidth: 1400,  // 增加最大寬度
+    minWidth: 700,
+    minHeight: 700,
+    maxWidth: 1400,
     webPreferences: {
-      // __dirname 指向的是 main.js 所在的根目錄
       preload: path.join(__dirname, 'src', 'preload.js'),
-      // 啟用上下文隔離，增強安全性
       contextIsolation: true,
-      // 禁用 nodeIntegration，因為我們已經有了 preload
       nodeIntegration: false,
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
     title: '電腦使用時間追蹤器',
-    show: false, // 先不顯示，等載入完成再顯示
-    center: true // 居中顯示
-  });
+    show: false,
+  };
+
+  // 如果有儲存位置就套用，否則置中
+  if (savedState) {
+    windowOptions.x = windowX;
+    windowOptions.y = windowY;
+  } else {
+    windowOptions.center = true;
+  }
+
+  mainWindow = new BrowserWindow(windowOptions);
 
   // 載入HTML文件
   mainWindow.loadFile('src/index.html');
@@ -64,8 +113,14 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // 視窗大小/位置變更時儲存
+  mainWindow.on('resize', () => saveWindowState());
+  mainWindow.on('move', () => saveWindowState());
+
   // 攔截窗口關閉事件
   mainWindow.on('close', (event) => {
+    // 儲存視窗狀態
+    saveWindowState();
     // 如果是強制退出，不攔截
     if (forceQuit) {
       return;
@@ -692,6 +747,28 @@ function setupIpcHandlers() {
       mainWindow.focus();
     }
   });
+
+  // 關閉螢幕（螢幕休眠）
+  ipcMain.on('turn-off-screen', () => {
+    console.log('🖥️ 關閉螢幕');
+    const { exec } = require('child_process');
+    exec('powershell -Command "(Add-Type -MemberDefinition \'[DllImport(\\\"user32.dll\\\")] public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);\' -Name ScreenOff -Namespace Win32 -PassThru)::SendMessage(-1, 0x0112, 0xF170, 2)"');
+  });
+
+  // 冷卻期開始（計時完成停止警報後）
+  ipcMain.on('cooldown-started', () => {
+    cooldownEndTime = Date.now() + 5 * 60 * 1000;
+    cooldownReminderShowing = false;
+    console.log('❄️ 冷卻期開始，5 分鐘後結束');
+  });
+
+  // 冷卻期提醒已關閉
+  ipcMain.on('cooldown-dismiss', () => {
+    cooldownReminderShowing = false;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setAlwaysOnTop(false);
+    }
+  });
 }
 
 // 啟動活動偵測提醒
@@ -708,11 +785,53 @@ function setupActivityReminder() {
       activeSeconds = 0;
     }
 
+    const now = Date.now();
+    const isChild = currentUserIdentity === 'user1' || currentUserIdentity === 'user2';
+
+    // 冷卻期內偵測到活動 → 顯示休息提醒
+    if (
+      isChild &&
+      now < cooldownEndTime &&
+      idleTime < 5 &&
+      !cooldownReminderShowing
+    ) {
+      const remainingMs = cooldownEndTime - now;
+      const remainingSec = Math.ceil(remainingMs / 1000);
+      console.log('😴 冷卻期內偵測到活動，剩餘', remainingSec, '秒');
+      cooldownReminderShowing = true;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show();
+        mainWindow.setAlwaysOnTop(true);
+        mainWindow.focus();
+        mainWindow.webContents.send('show-cooldown-reminder', remainingSec);
+      }
+    }
+
+    // 冷卻期內持續更新剩餘時間
+    if (isChild && now < cooldownEndTime && cooldownReminderShowing) {
+      const remainingSec = Math.ceil((cooldownEndTime - now) / 1000);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('update-cooldown-time', remainingSec);
+      }
+    }
+
+    // 冷卻期結束
+    if (cooldownEndTime > 0 && now >= cooldownEndTime) {
+      cooldownEndTime = 0;
+      cooldownReminderShowing = false;
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('cooldown-ended');
+        mainWindow.setAlwaysOnTop(false);
+      }
+    }
+
+    // 一般閒置提醒（非冷卻期）
     if (
       activeSeconds >= 60 &&
       !isTimerCurrentlyRunning &&
-      (currentUserIdentity === 'user1' || currentUserIdentity === 'user2') &&
-      Date.now() > reminderCooldownUntil
+      isChild &&
+      now > reminderCooldownUntil &&
+      now >= cooldownEndTime
     ) {
       console.log('⏰ 偵測到使用電腦但未計時，發送提醒');
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -720,9 +839,8 @@ function setupActivityReminder() {
         mainWindow.setAlwaysOnTop(true);
         mainWindow.focus();
         mainWindow.webContents.send('show-timer-reminder');
-        // 提醒被處理後（開始計時或稍後提醒），由渲染進程發送取消置頂
       }
-      reminderCooldownUntil = Date.now() + 5 * 60 * 1000;
+      reminderCooldownUntil = now + 5 * 60 * 1000;
       activeSeconds = 0;
     }
   }, 5000);

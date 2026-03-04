@@ -757,6 +757,8 @@ body.mini-mode-active {
     opacity: 0;
     transition: all 0.3s ease;
     z-index: 16;
+    display: flex;
+    gap: 10px;
 }
 
 .alarm-stop-button.show {
@@ -798,6 +800,48 @@ body.mini-mode-active {
     100% {
         box-shadow: 0 4px 15px rgba(255, 71, 87, 0.3);
     }
+}
+
+/* 關閉螢幕按鈕（警報區域） */
+.screen-off-btn {
+    background: linear-gradient(45deg, #2196F3, #1976D2);
+    color: white;
+    border: none;
+    padding: 12px 24px;
+    border-radius: 25px;
+    font-size: 16px;
+    cursor: pointer;
+    margin-left: 10px;
+    box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+    transition: all 0.2s ease;
+}
+
+.screen-off-btn:hover {
+    background: linear-gradient(45deg, #1976D2, #1565C0);
+    transform: scale(1.05);
+}
+
+/* 關閉螢幕按鈕（計時器旁） */
+.screen-off-wrapper {
+    text-align: center;
+    margin: 5px 0;
+}
+
+.screen-off-side-btn {
+    background: rgba(33, 150, 243, 0.2);
+    color: white;
+    border: 1px solid rgba(33, 150, 243, 0.3);
+    padding: 6px 16px;
+    border-radius: 15px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+.screen-off-side-btn:hover {
+    background: rgba(33, 150, 243, 0.3);
+    transform: scale(1.05);
 }
 
 /* Toast 通知 */
@@ -1753,4 +1797,14 @@ body.mini-mode-active {
 
 .reminder-snooze-btn:hover {
     background: var(--bg-overlay-hover);
+}
+
+/* 冷卻期剩餘時間顯示 */
+.cooldown-remaining-time {
+    font-size: 48px;
+    font-weight: 700;
+    color: #2196F3;
+    margin: 15px 0;
+    font-family: 'Poppins', monospace;
+    text-shadow: 0 2px 10px rgba(33, 150, 243, 0.3);
 }
