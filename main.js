@@ -50,7 +50,7 @@ function createWindow() {
       // 禁用 nodeIntegration，因為我們已經有了 preload
       nodeIntegration: false,
     },
-    // icon: path.join(__dirname, 'assets', 'icon.png'), // 應用程式圖標（註解掉避免檔案不存在錯誤）
+    icon: path.join(__dirname, 'assets', 'icon.png'),
     title: '電腦使用時間追蹤器',
     show: false, // 先不顯示，等載入完成再顯示
     center: true // 居中顯示
@@ -100,18 +100,21 @@ function createWindow() {
 
 // 創建系統托盤
 function createTray() {
+  // 防止重複建立 Tray
+  if (tray) return;
+
+  const { nativeImage } = require('electron');
+  const iconPath = path.join(__dirname, 'assets', 'icon.png');
+  let trayIcon;
   try {
-    // 嘗試創建托盤圖標
-    const iconPath = path.join(__dirname, 'assets', 'icon.png');
-    tray = new Tray(iconPath);
+    trayIcon = nativeImage.createFromPath(iconPath);
+    // 系統匣圖示建議 16x16，縮放避免模糊
+    trayIcon = trayIcon.resize({ width: 16, height: 16 });
   } catch (error) {
-    // 如果圖標檔案不存在，創建一個空的托盤
-    console.log('托盤圖標檔案不存在，使用預設圖標');
-    // 在 Windows 上可以使用 nativeImage 創建簡單圖標
-    const { nativeImage } = require('electron');
-    const image = nativeImage.createEmpty();
-    tray = new Tray(image);
+    console.log('托盤圖標載入失敗，使用預設圖標');
+    trayIcon = nativeImage.createEmpty();
   }
+  tray = new Tray(trayIcon);
   
   // 設置托盤工具提示
   tray.setToolTip('電腦使用時間追蹤器');
@@ -668,6 +671,26 @@ function setupIpcHandlers() {
     console.log('💤 稍後提醒，冷卻 5 分鐘');
     reminderCooldownUntil = Date.now() + 5 * 60 * 1000;
     activeSeconds = 0;
+    // 取消置頂
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setAlwaysOnTop(false);
+    }
+  });
+
+  // 取消視窗置頂（提醒被處理後）
+  ipcMain.on('cancel-always-on-top', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setAlwaysOnTop(false);
+    }
+  });
+
+  // 計時完成音效循環後強制置頂
+  ipcMain.on('force-window-top', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.show();
+      mainWindow.setAlwaysOnTop(true);
+      mainWindow.focus();
+    }
   });
 }
 
@@ -694,8 +717,10 @@ function setupActivityReminder() {
       console.log('⏰ 偵測到使用電腦但未計時，發送提醒');
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.show();
+        mainWindow.setAlwaysOnTop(true);
         mainWindow.focus();
         mainWindow.webContents.send('show-timer-reminder');
+        // 提醒被處理後（開始計時或稍後提醒），由渲染進程發送取消置頂
       }
       reminderCooldownUntil = Date.now() + 5 * 60 * 1000;
       activeSeconds = 0;

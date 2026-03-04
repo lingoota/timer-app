@@ -92,6 +92,7 @@ document.addEventListener('DOMContentLoaded', function() {
         cooldownUpdateInterval: null, // 冷卻期更新定時器
         alarmCycleTimeout: null, // 警報循環定時器
         alarmCycleActive: false, // 警報循環是否激活
+        alarmCycleCount: 0, // 警報循環次數計數
         // 用戶活動類別時間追蹤
         user1CategoryTime: {},
         user2CategoryTime: {},
@@ -714,8 +715,9 @@ document.addEventListener('DOMContentLoaded', function() {
             playCompletionEffect();
             
             if (state.soundEnabled) {
-                // 激活警報循環
+                // 激活警報循環，重置計數器
                 state.alarmCycleActive = true;
+                state.alarmCycleCount = 0;
                 playSound('complete');
             }
             
@@ -848,13 +850,18 @@ document.addEventListener('DOMContentLoaded', function() {
                         state.alarmAudio = null;
                     }
                     state.alarmTimeout = null;
-                    
+
                     // 如果警報循環激活，30秒後重新啟動警報
                     if (state.alarmCycleActive) {
+                        state.alarmCycleCount++;
                         showToast('警報音效已停止，30秒後將重新提醒');
                         state.alarmCycleTimeout = setTimeout(() => {
                             if (state.alarmCycleActive) {
-                                console.log('循環警報重新啟動');
+                                console.log('循環警報重新啟動，第 ' + (state.alarmCycleCount + 1) + ' 次');
+                                // 第 2 次循環起，強制視窗置頂
+                                if (state.alarmCycleCount >= 1) {
+                                    window.api.send('force-window-top');
+                                }
                                 playSound('complete');
                             }
                         }, 30000); // 30秒後重新啟動
@@ -939,8 +946,11 @@ document.addEventListener('DOMContentLoaded', function() {
             startCooldownUpdate();
         }
         
-        // 停止警報循環
+        // 停止警報循環，重置計數器
         state.alarmCycleActive = false;
+        state.alarmCycleCount = 0;
+        // 取消視窗置頂
+        window.api.send('cancel-always-on-top');
         
         // 隱藏停止警報按鈕
         hideAlarmStopButton();
@@ -2128,6 +2138,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (dom.timerReminderOverlay) {
                     dom.timerReminderOverlay.classList.add('hidden');
                 }
+                // 取消視窗置頂
+                window.api.send('cancel-always-on-top');
             });
         }
 

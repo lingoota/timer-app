@@ -9,7 +9,11 @@
       "Bash(node_modules/electron/dist/electron.exe --no-sandbox -e \"console.log\\(''Electron:'', process.versions.electron, ''Node:'', process.versions.node\\)\")",
       "Bash(node -e \":*)",
       "Bash(node -e \"const pkg = require\\(''./package.json''\\); console.log\\(''main:'', pkg.main\\)\")",
-      "Read(//e/Claude code workspace/Projects/timer-app-project/family-version/$LOCALAPPDATA/electron/**)"
+      "Read(//e/Claude code workspace/Projects/timer-app-project/family-version/$LOCALAPPDATA/electron/**)",
+      "Bash(python -X utf8 \"E:\\\\Claude code workspace\\\\Projects\\\\claude截圖工具\\\\screenshot_tool.py\" \"/e/Claude code workspace/Projects/timer-app-project/family-version\")",
+      "Read(//e/Claude code workspace/Projects/claude截圖工具/截圖/**)",
+      "Bash(powershell -Command \":*)",
+      "Read(//c/Users/lingoota/.claude/**)"
     ],
     "additionalDirectories": [
       "e:\\Claude code workspace\\Projects\\timer-app-project"
