@@ -615,16 +615,19 @@ function setupIpcHandlers() {
     
     if (mainWindow) {
       if (actionType === 'close') {
-        // 關閉按鈕：如果沒有計時就真正退出，如果有計時就隱藏到工具列
-        if (isTimerRunning) {
-          console.log('計時運行中，隱藏窗口到工具列');
-          
+        const isChild = currentUserIdentity === 'user1' || currentUserIdentity === 'user2';
+
+        // 小孩身份：一律隱藏到系統匣（防止誤關失去提醒功能）
+        // 家長/其他身份：有計時隱藏，沒計時真正退出
+        if (isTimerRunning || isChild) {
+          console.log(isChild ? '小孩身份，隱藏到系統匣' : '計時運行中，隱藏窗口到工具列');
+
           // 如果當前在迷你模式，先恢復正常大小再隱藏
           if (isMinimized) {
             console.log('從迷你模式恢復後隱藏');
             restoreFromMiniMode();
           }
-          
+
           mainWindow.hide();
         } else {
           console.log('沒有計時，真正退出應用程式');

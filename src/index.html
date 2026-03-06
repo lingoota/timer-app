@@ -318,7 +318,13 @@
                 <div class="charts-grid">
                     <!-- 活動分佈圓餅圖 -->
                     <div class="chart-card">
-                        <h3>活動分佈</h3>
+                        <div class="chart-header">
+                            <h3>活動分佈</h3>
+                            <div class="pie-user-toggle">
+                                <button class="pie-toggle-btn active" data-user="user1">品瑜</button>
+                                <button class="pie-toggle-btn" data-user="user2">品榕</button>
+                            </div>
+                        </div>
                         <canvas id="daily-pie-chart" width="260" height="260"></canvas>
                         <div id="daily-chart-legend" class="chart-legend"></div>
                     </div>

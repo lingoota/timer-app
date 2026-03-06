@@ -1050,11 +1050,48 @@ body {
     grid-column: 1 / -1;
 }
 
+.chart-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.chart-header h3 {
+    margin: 0;
+}
+
 .chart-card h3 {
     color: rgba(255, 255, 255, 0.9);
     font-size: 15px;
     font-weight: 600;
     margin-bottom: 12px;
+}
+
+.pie-user-toggle {
+    display: flex;
+    gap: 4px;
+}
+
+.pie-toggle-btn {
+    padding: 3px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 12px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.pie-toggle-btn.active {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.5);
+}
+
+.pie-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.15);
 }
 
 .chart-card canvas {

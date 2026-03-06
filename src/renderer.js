@@ -490,6 +490,16 @@ document.addEventListener('DOMContentLoaded', function() {
             renderHistoryTrend(parseInt(this.dataset.days));
         });
     });
+
+    // 圓餅圖使用者切換
+    document.querySelectorAll('.pie-toggle-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            document.querySelectorAll('.pie-toggle-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            state.pieChartUser = this.dataset.user;
+            renderDailyPieChart();
+        });
+    });
     
     // 主題切換按鈕事件
     dom.themeToggle.addEventListener('click', function(e) {
@@ -1759,13 +1769,15 @@ document.addEventListener('DOMContentLoaded', function() {
 
             if (activeTimer) {
                 // 計算剩餘時間
+                // totalDuration 從 Firebase 讀取，單位是秒（state.totalDuration = minutes * 60）
                 const elapsed = Date.now() - activeTimer.startTime;
-                const remaining = Math.max(0, activeTimer.totalDuration * 60 * 1000 - elapsed);
+                const totalMs = activeTimer.totalDuration * 1000;
+                const remaining = Math.max(0, totalMs - elapsed);
                 const remainingMinutes = Math.floor(remaining / 60000);
                 const remainingSeconds = Math.floor((remaining % 60000) / 1000);
 
                 // 計算進度
-                const progress = Math.min(100, Math.floor((elapsed / (activeTimer.totalDuration * 60 * 1000)) * 100));
+                const progress = Math.min(100, Math.floor((elapsed / totalMs) * 100));
 
                 liveStatusContent.innerHTML = `
                     <div class="active-timer-info">
@@ -2239,7 +2251,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const ctx = canvas.getContext('2d');
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const currentUser = state.selectedUser || 'user1';
+        const currentUser = state.pieChartUser || state.selectedUser || 'user1';
         let catData = currentUser === 'user1' ? state.user1CategoryTime : state.user2CategoryTime;
         const userName = currentUser === 'user1' ? '品瑜' : '品榕';
         const userTotal = currentUser === 'user1' ? state.user1TotalTime : state.user2TotalTime;
