@@ -31,7 +31,9 @@
       "Bash(python3 -c \":*)",
       "Bash(python -c \":*)",
       "Bash(node --check src/firebase-helpers.js)",
-      "Bash(curl -sI \"https://github.com/lingoota/timer-app/releases/latest/download/latest.yml\")"
+      "Bash(curl -sI \"https://github.com/lingoota/timer-app/releases/latest/download/latest.yml\")",
+      "Bash(node --check src/charts.js)",
+      "Bash(node --check src/updater-ui.js)"
     ],
     "additionalDirectories": [
       "e:\\Claude code workspace\\Projects\\timer-app-project",
