@@ -295,37 +295,50 @@
     <div id="charts-modal" class="modal hidden">
         <div class="modal-content charts-modal-content">
             <div class="modal-header">
-                <h2>統計圖表</h2>
-                <button id="charts-modal-close" class="modal-close">×</button>
+                <h2>使用統計</h2>
+                <button id="charts-modal-close" class="modal-close">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="charts-container">
-                    <!-- 今日活動分佈餅圖 -->
-                    <div class="chart-section">
-                        <h3>當前用戶活動分佈</h3>
-                        <canvas id="daily-pie-chart" width="300" height="300"></canvas>
+                <!-- 摘要數字卡片 -->
+                <div class="stats-summary-row">
+                    <div class="summary-card">
+                        <div class="summary-label">品瑜 今日</div>
+                        <div class="summary-value" id="summary-pinyu">0 分</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">品榕 今日</div>
+                        <div class="summary-value" id="summary-pinrong">0 分</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-label">合計</div>
+                        <div class="summary-value" id="summary-total">0 分</div>
+                    </div>
+                </div>
+
+                <div class="charts-grid">
+                    <!-- 活動分佈圓餅圖 -->
+                    <div class="chart-card">
+                        <h3>活動分佈</h3>
+                        <canvas id="daily-pie-chart" width="260" height="260"></canvas>
                         <div id="daily-chart-legend" class="chart-legend"></div>
                     </div>
-                    
-                    <!-- 用戶對比圖 -->
-                    <div class="chart-section">
-                        <h3>用戶使用對比</h3>
-                        <canvas id="user-comparison-chart" width="300" height="200"></canvas>
-                        <div id="user-chart-legend" class="chart-legend"></div>
+
+                    <!-- 品瑜 vs 品榕 對比長條圖 -->
+                    <div class="chart-card">
+                        <h3>今日對比</h3>
+                        <canvas id="user-comparison-chart" width="260" height="260"></canvas>
                     </div>
 
-                    <!-- 品瑜 24 小時使用時間線條圖 -->
-                    <div class="chart-section">
-                        <h3>品瑜 - 24 小時使用分佈</h3>
-                        <canvas id="pinyu-timeline-chart" width="600" height="250"></canvas>
-                        <div class="timeline-info">顯示今日每小時累計使用時間</div>
-                    </div>
-
-                    <!-- 品榕 24 小時使用時間線條圖 -->
-                    <div class="chart-section">
-                        <h3>品榕 - 24 小時使用分佈</h3>
-                        <canvas id="pinrong-timeline-chart" width="600" height="250"></canvas>
-                        <div class="timeline-info">顯示今日每小時累計使用時間</div>
+                    <!-- 歷史趨勢圖（跨列） -->
+                    <div class="chart-card chart-card-wide">
+                        <div class="chart-card-header">
+                            <h3>使用趨勢</h3>
+                            <div class="trend-tabs">
+                                <button class="trend-tab active" data-days="7">近 7 天</button>
+                                <button class="trend-tab" data-days="30">近 30 天</button>
+                            </div>
+                        </div>
+                        <canvas id="history-trend-chart" width="600" height="220"></canvas>
                     </div>
                 </div>
             </div>

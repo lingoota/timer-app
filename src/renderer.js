@@ -56,8 +56,11 @@ document.addEventListener('DOMContentLoaded', function() {
         chartsModalClose: document.getElementById('charts-modal-close'),
         dailyPieChart: document.getElementById('daily-pie-chart'),
         userComparisonChart: document.getElementById('user-comparison-chart'),
+        historyTrendChart: document.getElementById('history-trend-chart'),
         dailyChartLegend: document.getElementById('daily-chart-legend'),
-        userChartLegend: document.getElementById('user-chart-legend'),
+        summaryPinyu: document.getElementById('summary-pinyu'),
+        summaryPinrong: document.getElementById('summary-pinrong'),
+        summaryTotal: document.getElementById('summary-total'),
         themeToggle: document.getElementById('theme-toggle'),
         container: document.querySelector('.container'),
         alarmStopButton: document.getElementById('alarm-stop-button'),
@@ -120,13 +123,6 @@ document.addEventListener('DOMContentLoaded', function() {
     loadLocalBackup();
     updateStatsDisplay();
     initializeTheme();
-    
-    // 檢查關鍵 DOM 元素是否正確載入
-    console.log('=== DOM 元素檢查 ===');
-    console.log('exportBtn:', dom.exportBtn);
-    console.log('chartsBtn:', dom.chartsBtn);
-    console.log('exportModal:', dom.exportModal);
-    console.log('chartsModal:', dom.chartsModal);
     
     // 延遲執行用戶選擇初始化，確保DOM完全載入
     setTimeout(() => {
@@ -467,35 +463,32 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // 圖表按鈕事件
-    console.log('檢查圖表按鈕:', dom.chartsBtn);
     if (dom.chartsBtn) {
         dom.chartsBtn.addEventListener('click', function(e) {
-            console.log('Charts button clicked!');
             e.preventDefault();
             e.stopPropagation();
             dom.chartsModal.classList.remove('hidden');
-            // 延遲渲染圖表以確保模態對話框已顯示
-            setTimeout(() => {
-                renderCharts();
-            }, 100);
+            setTimeout(() => { renderCharts(); }, 100);
         });
-        console.log('圖表按鈕事件已綁定');
-    } else {
-        console.error('圖表按鈕未找到!');
     }
-    
+
     // 關閉圖表模態對話框
     dom.chartsModalClose.addEventListener('click', function() {
-        console.log('Charts modal close button clicked!');
         dom.chartsModal.classList.add('hidden');
     });
-    
-    // 點擊圖表模態背景關閉
     dom.chartsModal.addEventListener('click', function(e) {
         if (e.target === dom.chartsModal) {
-            console.log('Charts modal background clicked!');
             dom.chartsModal.classList.add('hidden');
         }
+    });
+
+    // 趨勢圖 tab 切換
+    document.querySelectorAll('.trend-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('.trend-tab').forEach(t => t.classList.remove('active'));
+            this.classList.add('active');
+            renderHistoryTrend(parseInt(this.dataset.days));
+        });
     });
     
     // 主題切換按鈕事件
@@ -1503,106 +1496,7 @@ document.addEventListener('DOMContentLoaded', function() {
         URL.revokeObjectURL(url);
     }
     
-    // 圖表渲染功能
-    function renderCharts() {
-        // 呼叫正確的活動類別圓餅圖渲染函數（定義在後面）
-        renderDailyPieChart();
-        renderUserComparisonChart();
-    }
-    
-    function renderUserComparisonChart() {
-        const canvas = dom.userComparisonChart;
-        const ctx = canvas.getContext('2d');
-        const padding = 40;
-        const chartWidth = canvas.width - (padding * 2);
-        const chartHeight = canvas.height - (padding * 2);
-        
-        // 清除畫布
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        const user1Minutes = Math.round(state.user1TotalTime / 60);
-        const user2Minutes = Math.round(state.user2TotalTime / 60);
-        const maxMinutes = Math.max(user1Minutes, user2Minutes, 30); // 最小刻度30分鐘
-        
-        // 繪製背景格線
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.lineWidth = 1;
-        for (let i = 0; i <= 5; i++) {
-            const y = padding + (chartHeight / 5) * i;
-            ctx.beginPath();
-            ctx.moveTo(padding, y);
-            ctx.lineTo(padding + chartWidth, y);
-            ctx.stroke();
-        }
-        
-        // 繪製條形圖
-        const barWidth = chartWidth / 3;
-        const user1Height = (user1Minutes / maxMinutes) * chartHeight;
-        const user2Height = (user2Minutes / maxMinutes) * chartHeight;
-        
-        // 繪製標籤
-        const computedStyle = getComputedStyle(document.documentElement);
-        const textColor = computedStyle.getPropertyValue('--text-primary').trim();
-        const user1ColorChart = computedStyle.getPropertyValue('--user1-color').trim();
-        const user2ColorChart = computedStyle.getPropertyValue('--user2-color').trim();
-        
-        // 品瑜的條形
-        ctx.fillStyle = user1ColorChart;
-        ctx.fillRect(
-            padding + barWidth * 0.2, 
-            padding + chartHeight - user1Height, 
-            barWidth * 0.6, 
-            user1Height
-        );
-        
-        // 品榕的條形
-        ctx.fillStyle = user2ColorChart;
-        ctx.fillRect(
-            padding + barWidth * 1.2, 
-            padding + chartHeight - user2Height, 
-            barWidth * 0.6, 
-            user2Height
-        );
-        
-        ctx.fillStyle = textColor;
-        ctx.font = '14px Poppins';
-        ctx.textAlign = 'center';
-        
-        // X軸標籤
-        ctx.fillText('品瑜', padding + barWidth * 0.5, canvas.height - 10);
-        ctx.fillText('品榕', padding + barWidth * 1.5, canvas.height - 10);
-        
-        // Y軸標籤
-        ctx.textAlign = 'right';
-        ctx.font = '12px Poppins';
-        for (let i = 0; i <= 5; i++) {
-            const value = Math.round((maxMinutes / 5) * (5 - i));
-            const y = padding + (chartHeight / 5) * i + 5;
-            ctx.fillText(value + 'min', padding - 10, y);
-        }
-        
-        // 數值標籤
-        ctx.textAlign = 'center';
-        ctx.font = '12px Poppins';
-        if (user1Minutes > 0) {
-            ctx.fillText(user1Minutes + 'min', padding + barWidth * 0.5, padding + chartHeight - user1Height - 10);
-        }
-        if (user2Minutes > 0) {
-            ctx.fillText(user2Minutes + 'min', padding + barWidth * 1.5, padding + chartHeight - user2Height - 10);
-        }
-        
-        // 更新圖例
-        dom.userChartLegend.innerHTML = `
-            <div class="legend-item">
-                <span class="legend-color" style="background-color: ${user1ColorChart}"></span>
-                品瑜: ${user1Minutes}分鐘 (${state.user1SessionCount}次)
-            </div>
-            <div class="legend-item">
-                <span class="legend-color" style="background-color: ${user2ColorChart}"></span>
-                品榕: ${user2Minutes}分鐘 (${state.user2SessionCount}次)
-            </div>
-        `;
-    }
+    // （圖表渲染功能定義在後面的 === 圖表功能實現 === 區塊中）
     
     // 主題切換
     function toggleTheme() {
@@ -2306,398 +2200,289 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // === 圖表功能實現 ===
-    
-    // 渲染圖表函數
+
+    const CATEGORY_COLORS = {
+        '遊戲': '#ff6384',
+        'YouTube': '#ff9f40',
+        '查資料': '#ffcd56',
+        '看漫畫': '#4bc0c0',
+        '學習': '#36a2eb',
+        '寫作': '#ff69b4',
+        '其他': '#9966ff',
+        '未分類': '#808080'
+    };
+    const USER_COLORS = { pinyu: '#64dcff', pinrong: '#ffb464' };
+
+    // 主渲染入口
     async function renderCharts() {
-        console.log('開始渲染圖表');
+        const u1Min = Math.round(state.user1TotalTime / 60);
+        const u2Min = Math.round(state.user2TotalTime / 60);
 
-        try {
-            // 獲取當前數據
-            const user1Minutes = Math.round(state.user1TotalTime / 60);
-            const user2Minutes = Math.round(state.user2TotalTime / 60);
-            const user1Sessions = state.user1SessionCount;
-            const user2Sessions = state.user2SessionCount;
+        // 更新摘要數字
+        if (dom.summaryPinyu) dom.summaryPinyu.textContent = `${u1Min} 分`;
+        if (dom.summaryPinrong) dom.summaryPinrong.textContent = `${u2Min} 分`;
+        if (dom.summaryTotal) dom.summaryTotal.textContent = `${u1Min + u2Min} 分`;
 
-            // 渲染當前用戶活動類別分佈餅圖
-            renderDailyPieChart();
+        renderDailyPieChart();
+        renderUserComparisonChart();
 
-            // 渲染用戶對比圖
-            renderUserComparisonChart(user1Minutes, user1Sessions, user2Minutes, user2Sessions);
-
-            // 渲染 24 小時使用時間線條圖
-            await renderTimelineCharts();
-
-            showToast('圖表已更新');
-        } catch (error) {
-            console.error('渲染圖表時發生錯誤:', error);
-            showToast('圖表渲染失敗');
-        }
+        // 取得目前選中的天數 tab
+        const activeTab = document.querySelector('.trend-tab.active');
+        const days = activeTab ? parseInt(activeTab.dataset.days) : 7;
+        await renderHistoryTrend(days);
     }
 
-    /**
-     * 渲染兩位使用者的 24 小時時間線條圖
-     */
-    async function renderTimelineCharts() {
-        try {
-            // 從 Firebase 取得今日活動記錄
-            const todayStats = await window.getTodayStats();
-
-            // 品瑜的資料
-            const pinyuRecords = todayStats.pinyu.records || [];
-            const pinyuHourlyData = calculateHourlyUsage(pinyuRecords);
-            renderTimelineChart('pinyu-timeline-chart', pinyuHourlyData, '品瑜', 'rgb(100, 220, 255)');
-
-            // 品榕的資料
-            const pinrongRecords = todayStats.pinrong.records || [];
-            const pinrongHourlyData = calculateHourlyUsage(pinrongRecords);
-            renderTimelineChart('pinrong-timeline-chart', pinrongHourlyData, '品榕', 'rgb(255, 180, 100)');
-
-            console.log('✅ 24 小時時間線條圖渲染完成');
-        } catch (error) {
-            console.error('❌ 渲染時間線條圖失敗:', error);
-        }
-    }
-    
-    // 渲染當前用戶活動類別分佈餅圖
+    // 圓餅圖：當前使用者的活動分佈
     function renderDailyPieChart() {
         const canvas = dom.dailyPieChart;
+        if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        
-        // 清除畫布
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // 獲取當前用戶的活動類別數據
-        const currentUser = state.selectedUser || 'user1'; // 預設使用 user1
-        let categoryData = currentUser === 'user1' ? state.user1CategoryTime : state.user2CategoryTime;
+
+        const currentUser = state.selectedUser || 'user1';
+        let catData = currentUser === 'user1' ? state.user1CategoryTime : state.user2CategoryTime;
         const userName = currentUser === 'user1' ? '品瑜' : '品榕';
-        const userTotalTime = currentUser === 'user1' ? state.user1TotalTime : state.user2TotalTime;
-        
-        // Debug 信息
-        console.log('=== 圓餅圖渲染 Debug ===');
-        console.log('當前用戶:', currentUser, userName);
-        console.log('用戶總時間:', userTotalTime);
-        console.log('用戶1活動類別數據:', state.user1CategoryTime);
-        console.log('用戶2活動類別數據:', state.user2CategoryTime);
-        console.log('當前用戶活動類別數據:', categoryData);
-        
-        // 計算活動類別總時間
-        const categoryTotal = Object.values(categoryData).reduce((sum, time) => sum + time, 0);
-        console.log('活動類別總時間:', categoryTotal);
-        
-        // 處理舊數據：如果有總時間但沒有活動類別數據，創建"未分類"項目
-        if (userTotalTime > 0 && categoryTotal === 0) {
-            console.log('檢測到舊數據，將總時間歸類為"未分類"');
-            categoryData = { ...categoryData, '未分類': userTotalTime };
-            // 更新狀態
-            if (currentUser === 'user1') {
-                state.user1CategoryTime = categoryData;
-            } else {
-                state.user2CategoryTime = categoryData;
-            }
-            saveLocalBackup(); // 保存更新的數據
+        const userTotal = currentUser === 'user1' ? state.user1TotalTime : state.user2TotalTime;
+
+        // 舊資料相容
+        const catTotal = Object.values(catData).reduce((s, t) => s + t, 0);
+        if (userTotal > 0 && catTotal === 0) {
+            catData = { ...catData, '未分類': userTotal };
+            if (currentUser === 'user1') state.user1CategoryTime = catData;
+            else state.user2CategoryTime = catData;
         }
-        
-        // 重新計算總時間
-        const total = Object.values(categoryData).reduce((sum, time) => sum + time, 0);
-        console.log('最終活動類別總時間:', total);
-        
+
+        const total = Object.values(catData).reduce((s, t) => s + t, 0);
         if (total === 0) {
-            // 沒有數據時顯示提示
-            ctx.fillStyle = '#666';
-            ctx.font = '16px Arial';
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.font = '14px sans-serif';
             ctx.textAlign = 'center';
             ctx.fillText(`${userName} 暫無活動數據`, canvas.width / 2, canvas.height / 2);
+            dom.dailyChartLegend.innerHTML = '';
             return;
         }
-        
-        // 定義活動類別顏色
-        const categoryColors = {
-            '遊戲': 'rgb(255, 99, 132)',
-            'YouTube': 'rgb(255, 159, 64)', 
-            '查資料': 'rgb(255, 205, 86)',
-            '看漫畫': 'rgb(75, 192, 192)',
-            '學習': 'rgb(54, 162, 235)',
-            '寫作': 'rgb(255, 105, 180)',
-            '其他': 'rgb(153, 102, 255)',
-            '未分類': 'rgb(128, 128, 128)' // 灰色代表舊的未分類數據
-        };
-        
-        // 繪製餅圖
-        const centerX = canvas.width / 2;
-        const centerY = canvas.height / 2;
-        const radius = Math.min(centerX, centerY) - 20;
-        
-        let currentAngle = 0;
-        
-        Object.entries(categoryData).forEach(([category, time]) => {
-            if (time > 0) {
-                const angle = (time / total) * 2 * Math.PI;
-                
-                // 繪製扇形
-                ctx.beginPath();
-                ctx.arc(centerX, centerY, radius, currentAngle, currentAngle + angle);
-                ctx.lineTo(centerX, centerY);
-                ctx.fillStyle = categoryColors[category] || 'rgb(128, 128, 128)';
-                ctx.fill();
-                
-                currentAngle += angle;
-            }
+
+        const cx = canvas.width / 2, cy = canvas.height / 2;
+        const outerR = Math.min(cx, cy) - 16;
+        const innerR = outerR * 0.55; // 甜甜圈效果
+        let angle = -Math.PI / 2;
+
+        Object.entries(catData).forEach(([cat, time]) => {
+            if (time <= 0) return;
+            const sweep = (time / total) * Math.PI * 2;
+            ctx.beginPath();
+            ctx.arc(cx, cy, outerR, angle, angle + sweep);
+            ctx.arc(cx, cy, innerR, angle + sweep, angle, true);
+            ctx.closePath();
+            ctx.fillStyle = CATEGORY_COLORS[cat] || '#808080';
+            ctx.fill();
+            angle += sweep;
         });
-        
-        // 更新圖例
-        updateDailyChartLegend(categoryData, userName);
-    }
-    
-    // 渲染用戶對比圖
-    function renderUserComparisonChart(user1Minutes, user1Sessions, user2Minutes, user2Sessions) {
-        const canvas = dom.userComparisonChart;
-        const ctx = canvas.getContext('2d');
-        
-        // 清除畫布
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        const maxValue = Math.max(user1Minutes, user2Minutes, 1);
-        const barWidth = 80;
-        const barMaxHeight = canvas.height - 60;
-        
-        // 品瑜的柱子
-        const user1Height = (user1Minutes / maxValue) * barMaxHeight;
-        ctx.fillStyle = 'rgb(100, 220, 255)';
-        ctx.fillRect(50, canvas.height - 30 - user1Height, barWidth, user1Height);
-        
-        // 品榕的柱子
-        const user2Height = (user2Minutes / maxValue) * barMaxHeight;
-        ctx.fillStyle = 'rgb(255, 180, 100)';
-        ctx.fillRect(170, canvas.height - 30 - user2Height, barWidth, user2Height);
-        
-        // 添加標籤
+
+        // 中間文字
         ctx.fillStyle = 'white';
-        ctx.font = '14px Arial';
+        ctx.font = 'bold 22px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('品瑜', 90, canvas.height - 10);
-        ctx.fillText('品榕', 210, canvas.height - 10);
-        
-        // 添加數值標籤
-        ctx.font = '12px Arial';
-        ctx.fillText(`${user1Minutes}分`, 90, canvas.height - 35 - user1Height);
-        ctx.fillText(`${user2Minutes}分`, 210, canvas.height - 35 - user2Height);
-        
-        // 更新圖例
-        updateUserChartLegend(user1Minutes, user1Sessions, user2Minutes, user2Sessions);
-    }
-    
-    // 更新活動類別圖表圖例
-    function updateDailyChartLegend(categoryData, userName) {
-        const categoryColors = {
-            '遊戲': 'rgb(255, 99, 132)',
-            'YouTube': 'rgb(255, 159, 64)', 
-            '查資料': 'rgb(255, 205, 86)',
-            '看漫畫': 'rgb(75, 192, 192)',
-            '學習': 'rgb(54, 162, 235)',
-            '寫作': 'rgb(255, 105, 180)',
-            '其他': 'rgb(153, 102, 255)',
-            '未分類': 'rgb(128, 128, 128)' // 灰色代表舊的未分類數據
-        };
-        
-        const total = Object.values(categoryData).reduce((sum, time) => sum + time, 0);
-        
-        if (total === 0) {
-            dom.dailyChartLegend.innerHTML = `<div class="legend-item"><span>${userName} 暫無活動數據</span></div>`;
-            return;
-        }
-        
-        let legendHTML = '';
-        Object.entries(categoryData).forEach(([category, time]) => {
-            if (time > 0) {
-                const minutes = Math.round(time / 60);
-                const percent = Math.round((time / total) * 100);
-                const color = categoryColors[category] || 'rgb(128, 128, 128)';
-                
-                legendHTML += `
-                    <div class="legend-item">
-                        <div class="legend-color" style="background-color: ${color};"></div>
-                        <span>${category}: ${minutes}分鐘 (${percent}%)</span>
-                    </div>
-                `;
-            }
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${Math.round(total / 60)}分`, cx, cy - 8);
+        ctx.font = '12px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fillText(userName, cx, cy + 14);
+
+        // 圖例
+        let legend = '';
+        Object.entries(catData).forEach(([cat, time]) => {
+            if (time <= 0) return;
+            const min = Math.round(time / 60);
+            const pct = Math.round((time / total) * 100);
+            legend += `<div class="legend-item"><span class="legend-color" style="background:${CATEGORY_COLORS[cat] || '#808080'}"></span>${cat} ${min}分 (${pct}%)</div>`;
         });
-        
-        dom.dailyChartLegend.innerHTML = legendHTML;
-    }
-    
-    // 更新用戶對比圖例
-    function updateUserChartLegend(user1Minutes, user1Sessions, user2Minutes, user2Sessions) {
-        dom.userChartLegend.innerHTML = `
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: rgb(100, 220, 255);"></div>
-                <span>品瑜: ${user1Minutes}分鐘 (${user1Sessions}次)</span>
-            </div>
-            <div class="legend-item">
-                <div class="legend-color" style="background-color: rgb(255, 180, 100);"></div>
-                <span>品榕: ${user2Minutes}分鐘 (${user2Sessions}次)</span>
-            </div>
-        `;
+        dom.dailyChartLegend.innerHTML = legend;
     }
 
-    // ===================================
-    // 24 小時使用時間線條圖
-    // ===================================
+    // 長條圖：品瑜 vs 品榕
+    function renderUserComparisonChart() {
+        const canvas = dom.userComparisonChart;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        ctx.clearRect(0, 0, W, H);
 
-    /**
-     * 繪製 24 小時使用時間線條圖
-     * @param {string} canvasId - Canvas 元素 ID
-     * @param {Array} hourlyData - 24 小時的使用時間資料 (分鐘)
-     * @param {string} userName - 使用者名稱
-     * @param {string} color - 線條顏色
-     */
-    function renderTimelineChart(canvasId, hourlyData, userName, color) {
-        const canvas = document.getElementById(canvasId);
-        if (!canvas) {
-            console.error(`找不到 canvas: ${canvasId}`);
+        const u1Min = Math.round(state.user1TotalTime / 60);
+        const u2Min = Math.round(state.user2TotalTime / 60);
+        const maxVal = Math.max(u1Min, u2Min, 1);
+
+        const pad = { top: 30, bottom: 40, left: 20, right: 20 };
+        const barArea = H - pad.top - pad.bottom;
+        const barW = 70;
+        const gap = 40;
+        const startX = (W - barW * 2 - gap) / 2;
+
+        // 圓角長條函數
+        function roundedBar(x, y, w, h, r) {
+            if (h < r * 2) r = h / 2;
+            ctx.beginPath();
+            ctx.moveTo(x + r, y);
+            ctx.lineTo(x + w - r, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+            ctx.lineTo(x + w, y + h);
+            ctx.lineTo(x, y + h);
+            ctx.lineTo(x, y + r);
+            ctx.quadraticCurveTo(x, y, x + r, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // 品瑜
+        const u1H = Math.max((u1Min / maxVal) * barArea, 2);
+        ctx.fillStyle = USER_COLORS.pinyu;
+        roundedBar(startX, pad.top + barArea - u1H, barW, u1H, 8);
+
+        // 品榕
+        const u2H = Math.max((u2Min / maxVal) * barArea, 2);
+        ctx.fillStyle = USER_COLORS.pinrong;
+        roundedBar(startX + barW + gap, pad.top + barArea - u2H, barW, u2H, 8);
+
+        // 數值標籤
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(`${u1Min}分`, startX + barW / 2, pad.top + barArea - u1H - 6);
+        ctx.fillText(`${u2Min}分`, startX + barW + gap + barW / 2, pad.top + barArea - u2H - 6);
+
+        // 名稱標籤
+        ctx.font = '13px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.textBaseline = 'top';
+        ctx.fillText('品瑜', startX + barW / 2, H - pad.bottom + 8);
+        ctx.fillText('品榕', startX + barW + gap + barW / 2, H - pad.bottom + 8);
+
+        // 次數
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillText(`${state.user1SessionCount}次`, startX + barW / 2, H - pad.bottom + 24);
+        ctx.fillText(`${state.user2SessionCount}次`, startX + barW + gap + barW / 2, H - pad.bottom + 24);
+    }
+
+    // 歷史趨勢圖
+    async function renderHistoryTrend(days) {
+        const canvas = dom.historyTrendChart;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width, H = canvas.height;
+        ctx.clearRect(0, 0, W, H);
+
+        // 載入提示
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('載入中...', W / 2, H / 2);
+
+        let history = [];
+        try {
+            history = await window.getHistoryStats(days);
+        } catch (e) {
+            console.error('取得歷史資料失敗:', e);
+        }
+
+        ctx.clearRect(0, 0, W, H);
+
+        if (!history || history.length === 0) {
+            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.fillText('暫無歷史資料', W / 2, H / 2);
             return;
         }
 
-        const ctx = canvas.getContext('2d');
-        const width = canvas.width;
-        const height = canvas.height;
+        const pad = { top: 20, right: 30, bottom: 35, left: 45 };
+        const cW = W - pad.left - pad.right;
+        const cH = H - pad.top - pad.bottom;
+        const n = history.length;
+        const maxVal = Math.max(...history.map(d => Math.max(d.pinyu, d.pinrong)), 10);
+        const xStep = cW / Math.max(n - 1, 1);
 
-        // 清除畫布
-        ctx.clearRect(0, 0, width, height);
-
-        // 設定繪圖區域的邊距
-        const padding = { top: 30, right: 40, bottom: 40, left: 50 };
-        const chartWidth = width - padding.left - padding.right;
-        const chartHeight = height - padding.top - padding.bottom;
-
-        // 找出最大值，用於計算 Y 軸比例
-        const maxMinutes = Math.max(...hourlyData, 10); // 至少顯示到 10 分鐘
-        const yScale = chartHeight / maxMinutes;
-        const xScale = chartWidth / 23; // 0-23 小時，共 24 個點
-
-        // 繪製背景網格線
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        // 網格線
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
         ctx.lineWidth = 1;
-
-        // 水平網格線 (每 10 分鐘一條)
-        for (let i = 0; i <= maxMinutes; i += 10) {
-            const y = padding.top + chartHeight - (i * yScale);
+        for (let i = 0; i <= 4; i++) {
+            const y = pad.top + (cH / 4) * i;
             ctx.beginPath();
-            ctx.moveTo(padding.left, y);
-            ctx.lineTo(padding.left + chartWidth, y);
+            ctx.moveTo(pad.left, y);
+            ctx.lineTo(pad.left + cW, y);
             ctx.stroke();
         }
 
-        // 垂直網格線 (每 4 小時一條)
-        for (let hour = 0; hour <= 24; hour += 4) {
-            const x = padding.left + (hour * xScale);
-            ctx.beginPath();
-            ctx.moveTo(x, padding.top);
-            ctx.lineTo(x, padding.top + chartHeight);
-            ctx.stroke();
-        }
-
-        // 繪製 X 軸
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(padding.left, padding.top + chartHeight);
-        ctx.lineTo(padding.left + chartWidth, padding.top + chartHeight);
-        ctx.stroke();
-
-        // 繪製 Y 軸
-        ctx.beginPath();
-        ctx.moveTo(padding.left, padding.top);
-        ctx.lineTo(padding.left, padding.top + chartHeight);
-        ctx.stroke();
-
-        // 繪製 X 軸標籤 (小時)
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'center';
-        for (let hour = 0; hour <= 24; hour += 4) {
-            const x = padding.left + (hour * xScale);
-            const y = padding.top + chartHeight + 20;
-            ctx.fillText(`${hour}:00`, x, y);
-        }
-
-        // 繪製 Y 軸標籤 (分鐘)
+        // Y 軸標籤
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.font = '10px sans-serif';
         ctx.textAlign = 'right';
         ctx.textBaseline = 'middle';
-        for (let i = 0; i <= maxMinutes; i += 10) {
-            const y = padding.top + chartHeight - (i * yScale);
-            ctx.fillText(`${i}分`, padding.left - 10, y);
+        for (let i = 0; i <= 4; i++) {
+            const val = Math.round(maxVal * (4 - i) / 4);
+            ctx.fillText(`${val}分`, pad.left - 8, pad.top + (cH / 4) * i);
         }
 
-        // 繪製標題
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.font = 'bold 14px Arial';
+        // X 軸標籤
         ctx.textAlign = 'center';
-        ctx.fillText(`${userName} - 今日每小時累計使用時間`, width / 2, 15);
-
-        // 繪製折線圖
-        ctx.strokeStyle = color;
-        ctx.fillStyle = color;
-        ctx.lineWidth = 3;
-        ctx.lineJoin = 'round';
-        ctx.lineCap = 'round';
-
-        ctx.beginPath();
-        for (let hour = 0; hour < 24; hour++) {
-            const x = padding.left + (hour * xScale);
-            const y = padding.top + chartHeight - (hourlyData[hour] * yScale);
-
-            if (hour === 0) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
-            }
-        }
-        ctx.stroke();
-
-        // 繪製資料點
-        for (let hour = 0; hour < 24; hour++) {
-            const x = padding.left + (hour * xScale);
-            const y = padding.top + chartHeight - (hourlyData[hour] * yScale);
-
-            // 繪製圓點
-            ctx.beginPath();
-            ctx.arc(x, y, 4, 0, Math.PI * 2);
-            ctx.fill();
-
-            // 如果有使用時間，顯示數值
-            if (hourlyData[hour] > 0) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-                ctx.font = '10px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'bottom';
-                ctx.fillText(`${hourlyData[hour]}`, x, y - 8);
-                ctx.fillStyle = color;
-            }
-        }
-    }
-
-    /**
-     * 從 Firebase 資料計算每小時的累計使用時間
-     * @param {Array} records - 活動記錄陣列
-     * @returns {Array} 24 小時的使用時間 (分鐘)
-     */
-    function calculateHourlyUsage(records) {
-        const hourlyMinutes = new Array(24).fill(0);
-
-        if (!records || records.length === 0) {
-            return hourlyMinutes;
-        }
-
-        records.forEach(record => {
-            if (record.timestamp) {
-                const date = record.timestamp.toDate ? record.timestamp.toDate() : new Date(record.timestamp);
-                const hour = date.getHours();
-                const minutes = Math.round(record.duration / 60); // 秒轉分鐘
-                hourlyMinutes[hour] += minutes;
+        ctx.textBaseline = 'top';
+        const labelStep = n <= 10 ? 1 : Math.ceil(n / 10);
+        history.forEach((d, i) => {
+            if (i % labelStep === 0 || i === n - 1) {
+                ctx.fillText(d.label, pad.left + i * xStep, pad.top + cH + 8);
             }
         });
 
-        return hourlyMinutes;
+        // 繪製面積 + 折線
+        function drawLine(key, color) {
+            const points = history.map((d, i) => ({
+                x: pad.left + i * xStep,
+                y: pad.top + cH - (d[key] / maxVal) * cH
+            }));
+
+            // 半透明填充
+            ctx.beginPath();
+            ctx.moveTo(points[0].x, pad.top + cH);
+            points.forEach(p => ctx.lineTo(p.x, p.y));
+            ctx.lineTo(points[points.length - 1].x, pad.top + cH);
+            ctx.closePath();
+            ctx.fillStyle = color.replace(')', ', 0.15)').replace('rgb', 'rgba');
+            ctx.fill();
+
+            // 折線
+            ctx.beginPath();
+            points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2.5;
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+
+            // 資料點
+            points.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = color;
+                ctx.fill();
+            });
+        }
+
+        drawLine('pinyu', USER_COLORS.pinyu);
+        drawLine('pinrong', USER_COLORS.pinrong);
+
+        // 圖例（右上角）
+        ctx.font = '11px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        const legendX = W - pad.right - 100;
+
+        ctx.fillStyle = USER_COLORS.pinyu;
+        ctx.beginPath(); ctx.arc(legendX, pad.top + 6, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillText('品瑜', legendX + 10, pad.top + 6);
+
+        ctx.fillStyle = USER_COLORS.pinrong;
+        ctx.beginPath(); ctx.arc(legendX + 52, pad.top + 6, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.8)';
+        ctx.fillText('品榕', legendX + 62, pad.top + 6);
     }
 
     // ===================================

@@ -315,11 +315,60 @@ async function getLiveTimerStatus() {
     }
 }
 
+/**
+ * 取得近 N 天的每日統計資料（用於歷史趨勢圖）
+ * @param {number} days - 要查詢的天數（例如 7 或 30）
+ * @returns {Array} 每天的統計資料 [{ date, pinyu: totalTime, pinrong: totalTime }]
+ */
+async function getHistoryStats(days) {
+    try {
+        const { db, functions } = await waitForFirebase();
+        const { doc, getDoc } = functions;
+
+        const results = [];
+        const today = new Date();
+
+        for (let i = days - 1; i >= 0; i--) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+            let pinyuTime = 0;
+            let pinrongTime = 0;
+
+            try {
+                const [pinyuDoc, pinrongDoc] = await Promise.all([
+                    getDoc(doc(db, 'users', 'pinyu', 'activities', dateString)),
+                    getDoc(doc(db, 'users', 'pinrong', 'activities', dateString))
+                ]);
+                if (pinyuDoc.exists()) pinyuTime = pinyuDoc.data().totalTime || 0;
+                if (pinrongDoc.exists()) pinrongTime = pinrongDoc.data().totalTime || 0;
+            } catch (e) {
+                // 某天資料讀取失敗，跳過
+            }
+
+            results.push({
+                date: dateString,
+                label: `${date.getMonth() + 1}/${date.getDate()}`,
+                pinyu: Math.round(pinyuTime / 60),
+                pinrong: Math.round(pinrongTime / 60)
+            });
+        }
+
+        console.log(`📊 Firebase: 近 ${days} 天歷史統計`, results);
+        return results;
+    } catch (error) {
+        console.error('❌ Firebase: 取得歷史統計失敗:', error);
+        return [];
+    }
+}
+
 // 將函數掛載到 window 物件，供 renderer.js 使用
 window.initializeUser = initializeUser;
 window.getUserStats = getUserStats;
 window.recordActivity = recordActivity;
 window.getTodayActivities = getTodayActivities;
 window.getTodayStats = getTodayStats;
+window.getHistoryStats = getHistoryStats;
 window.updateLiveTimerStatus = updateLiveTimerStatus;
 window.getLiveTimerStatus = getLiveTimerStatus;

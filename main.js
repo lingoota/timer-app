@@ -213,7 +213,11 @@ function createTray() {
   
   // 雙擊托盤圖標顯示窗口
   tray.on('double-click', () => {
-    if (mainWindow) {
+    // 如果在迷你模式，優先顯示迷你視窗
+    if (isMinimized && miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.show();
+      miniWindow.focus();
+    } else if (mainWindow) {
       if (isMinimized) {
         restoreFromMiniMode();
       }
@@ -246,9 +250,10 @@ function createMiniWindow(timeString, userName) {
     height: 70,
     frame: false,
     transparent: true,
-    alwaysOnTop: true,
+    alwaysOnTop: false,
     resizable: false,
-    skipTaskbar: true,
+    skipTaskbar: false,
+    minimizable: true,
     webPreferences: {
       preload: path.join(__dirname, 'src', 'preload.js'),
       contextIsolation: true,
@@ -279,6 +284,15 @@ function createMiniWindow(timeString, userName) {
     }
   });
 
+  // 關閉按鈕 → 隱藏到系統匣（計時繼續背景執行）
+  miniWindow.on('close', (e) => {
+    if (!forceQuit && miniWindow && !miniWindow.isDestroyed()) {
+      e.preventDefault();
+      miniWindow.hide();
+      console.log('迷你視窗已隱藏到系統匣');
+    }
+  });
+
   miniWindow.on('closed', () => {
     miniWindow = null;
   });
@@ -292,9 +306,10 @@ function createMiniWindow(timeString, userName) {
   console.log('迷你視窗已建立');
 }
 
-// 關閉迷你視窗
+// 關閉迷你視窗（真正銷毀）
 function closeMiniWindow() {
   if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.removeAllListeners('close'); // 移除隱藏攔截，允許真正關閉
     miniWindow.close();
     miniWindow = null;
   }
@@ -679,6 +694,21 @@ function setupIpcHandlers() {
       mainWindow.webContents.send('global-shortcut', 'stop');
     }
     restoreFromMiniMode();
+  });
+
+  // 迷你視窗：最小化
+  ipcMain.on('mini-minimize', () => {
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.minimize();
+    }
+  });
+
+  // 迷你視窗：關閉（隱藏到系統匣）
+  ipcMain.on('mini-close', () => {
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.hide();
+      console.log('迷你視窗已隱藏到系統匣');
+    }
   });
 
   // 計時結束時將窗口置頂

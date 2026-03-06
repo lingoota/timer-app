@@ -16,8 +16,8 @@
       border-radius: 12px;
       display: flex;
       align-items: center;
-      padding: 0 12px;
-      gap: 8px;
+      padding: 0 8px 0 12px;
+      gap: 6px;
     }
 
     .user-name {
@@ -40,18 +40,18 @@
 
     .controls {
       display: flex;
-      gap: 6px;
+      gap: 4px;
       -webkit-app-region: no-drag;
     }
 
     .btn {
-      width: 34px;
-      height: 34px;
+      width: 30px;
+      height: 30px;
       border: none;
       border-radius: 50%;
       background: rgba(255, 255, 255, 0.2);
       color: white;
-      font-size: 16px;
+      font-size: 14px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -66,6 +66,31 @@
     .btn:active {
       background: rgba(255, 255, 255, 0.5);
     }
+
+    /* 視窗控制按鈕（最小化、關閉）較小 */
+    .btn-sm {
+      width: 22px;
+      height: 22px;
+      font-size: 11px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .btn-sm:hover {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .btn-close:hover {
+      background: rgba(255, 80, 80, 0.7);
+    }
+
+    .window-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      -webkit-app-region: no-drag;
+      margin-left: 2px;
+    }
   </style>
 </head>
 <body>
@@ -75,12 +100,18 @@
     <button class="btn" id="pause-btn" title="暫停">⏸</button>
     <button class="btn" id="stop-btn" title="結束計時">⏹</button>
   </div>
+  <div class="window-controls">
+    <button class="btn-sm" id="minimize-btn" title="最小化">─</button>
+    <button class="btn-sm btn-close" id="close-btn" title="隱藏到系統匣">✕</button>
+  </div>
 
   <script>
     const timeDisplay = document.getElementById('time-display');
     const userNameEl = document.getElementById('user-name');
     const pauseBtn = document.getElementById('pause-btn');
     const stopBtn = document.getElementById('stop-btn');
+    const minimizeBtn = document.getElementById('minimize-btn');
+    const closeBtn = document.getElementById('close-btn');
 
     let isPaused = false;
 
@@ -109,6 +140,16 @@
     // 結束計時按鈕
     stopBtn.addEventListener('click', () => {
       window.api.send('mini-stop');
+    });
+
+    // 最小化按鈕
+    minimizeBtn.addEventListener('click', () => {
+      window.api.send('mini-minimize');
+    });
+
+    // 關閉按鈕（隱藏到系統匣）
+    closeBtn.addEventListener('click', () => {
+      window.api.send('mini-close');
     });
   </script>
 </body>

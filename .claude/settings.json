@@ -25,7 +25,12 @@
       "Bash(node --check main.js)",
       "Bash(node --check src/renderer.js)",
       "Bash(node --check \"e:/Claude code workspace/Projects/timer-app-project/family-version/src/renderer.js\")",
-      "Bash(node --check src/background.js)"
+      "Bash(node --check src/background.js)",
+      "Bash(curl -sI \"https://github.com/lingoota/timer-app/releases/download/v2.0.0-beta.11/latest.yml\")",
+      "Bash(xxd)",
+      "Bash(python3 -c \":*)",
+      "Bash(python -c \":*)",
+      "Bash(node --check src/firebase-helpers.js)"
     ],
     "additionalDirectories": [
       "e:\\Claude code workspace\\Projects\\timer-app-project",
