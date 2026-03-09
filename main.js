@@ -402,6 +402,22 @@ function setupAutoUpdater() {
   return autoUpdater;
 }
 
+// 單一實例鎖定：防止重複開啟
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  // 已有實例在運行，退出新實例
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    // 使用者嘗試開第二個實例 → 把現有視窗拉回前景
+    if (mainWindow) {
+      if (!mainWindow.isVisible()) mainWindow.show();
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+  });
+}
+
 // 當Electron完成初始化並準備創建瀏覽器窗口時調用此方法
 app.whenReady().then(() => {
   setupIpcHandlers();
@@ -611,7 +627,7 @@ function setupIpcHandlers() {
 
   // 處理計時狀態檢查回應
   ipcMain.on('timer-status-response', (event, isTimerRunning, actionType) => {
-    console.log('主進程收到計時狀態回應:', {isTimerRunning, actionType, isMinimized});
+    console.log('主進程收到計時狀態回應:', {isTimerRunning, actionType, isMinimized, currentUserIdentity});
     
     if (mainWindow) {
       if (actionType === 'close') {
