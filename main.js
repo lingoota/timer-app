@@ -261,9 +261,23 @@ function createMiniWindow(timeString, userName) {
     },
   };
 
+  // 檢查記憶位置是否在螢幕可見範圍內
   if (miniPos) {
-    miniOptions.x = miniPos.x;
-    miniOptions.y = miniPos.y;
+    const displays = screen.getAllDisplays();
+    const isVisible = displays.some(display => {
+      const { x, y, width, height } = display.workArea;
+      // 迷你視窗中心點必須在工作區域內（避免被工作列擋住）
+      const centerX = miniPos.x + 140; // 280/2
+      const centerY = miniPos.y + 35;  // 70/2
+      return centerX > x && centerX < x + width &&
+             centerY > y && centerY < y + height;
+    });
+    if (isVisible) {
+      miniOptions.x = miniPos.x;
+      miniOptions.y = miniPos.y;
+    } else {
+      console.log('迷你視窗記憶位置超出螢幕，重置到右上角');
+    }
   }
 
   miniWindow = new BrowserWindow(miniOptions);
@@ -297,8 +311,8 @@ function createMiniWindow(timeString, userName) {
     miniWindow = null;
   });
 
-  // 如果沒有記憶位置，放在螢幕右上角
-  if (!miniPos) {
+  // 如果沒有設定位置，放在螢幕右上角
+  if (!miniOptions.x && miniOptions.x !== 0) {
     const { width: screenW } = screen.getPrimaryDisplay().workAreaSize;
     miniWindow.setPosition(screenW - 300, 20);
   }
