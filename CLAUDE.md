@@ -3,7 +3,7 @@
 ## 專案概覽
 
 **專案名稱**: 時間追蹤器家庭版 (Time Calculator - Family Edition)
-**當前版本**: v2.0.0-beta.10
+**當前版本**: v2.0.0-beta.18
 **技術架構**: Electron + HTML/CSS/JavaScript + Firebase Firestore
 **GitHub**: https://github.com/lingoota/timer-app
 
@@ -16,7 +16,9 @@ family-version/
 ├── assets/icon.png          # 應用圖示
 ├── src/
 │   ├── index.html           # 主界面
-│   ├── renderer.js          # 前端邏輯
+│   ├── renderer.js          # 前端邏輯（主入口）
+│   ├── charts.js            # 統計圖表 + 匯出
+│   ├── updater-ui.js        # 更新通知 UI
 │   ├── styles.css           # 樣式表
 │   ├── preload.js           # IPC 橋接
 │   ├── firebase-helpers.js  # Firebase CRUD
@@ -51,5 +53,5 @@ npm run build      # 建置 NSIS 安裝檔
 
 ---
 
-**最後更新**: 2026-03-04
-**專案狀態**: 活躍開發中（beta.11 開發中）
+**最後更新**: 2026-03-09
+**專案狀態**: 活躍開發中（穩定測試階段）

@@ -72,11 +72,13 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     // 狀態變數
+    // 注意：v2.0.0-beta.19 起，計時 tick 由 main 進程負責（不被 Chromium 節流）
+    // renderer 只持有顯示用的快照（isRunning / isPaused / timeLeft）
     const state = {
-        timer: null,
         timeLeft: 0,
         totalDuration: 0,
-        isRunning: false,
+        isRunning: false,   // 顯示用：是否進行中（不含暫停）
+        isPaused: false,    // 顯示用：是否暫停（按開始 → 視為 resume 而非新開始）
         selectedUser: null,
         selectedCategory: null,
         user1TotalTime: 0,
@@ -86,8 +88,6 @@ document.addEventListener('DOMContentLoaded', function() {
         startTimestamp: null,
         soundEnabled: true,
         achievementTimeout: null,
-        lastUpdateTime: null,
-        preventSleepInterval: null,
         isMiniMode: false,
         isDarkMode: false,
         alarmAudio: null, // 用於追蹤警報音效
@@ -338,9 +338,12 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!state.isRunning) {
                 dom.timeButtons.forEach(b => b.classList.remove('active'));
                 this.classList.add('active');
-                
+
+                // 改變時間 → 視為新計時，清除暫停狀態
+                state.isPaused = false;
+
                 const minutesData = this.dataset.minutes;
-                
+
                 if (minutesData === 'custom') {
                     // 顯示自定義時間輸入框
                     dom.customTimeInput.classList.remove('hidden');
@@ -351,7 +354,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 } else {
                     // 隱藏自定義時間輸入框
                     dom.customTimeInput.classList.add('hidden');
-                    
+
                     const minutes = parseInt(minutesData);
                     state.totalDuration = minutes * 60;
                     state.timeLeft = state.totalDuration;
@@ -371,8 +374,9 @@ document.addEventListener('DOMContentLoaded', function() {
     // 自定義時間確認按鈕
     dom.confirmCustomTimeBtn.addEventListener('click', function() {
         const customMinutes = parseInt(dom.customMinutesInput.value);
-        
+
         if (validateCustomTime(customMinutes)) {
+            state.isPaused = false; // 改變時間 → 視為新計時
             state.totalDuration = customMinutes * 60;
             state.timeLeft = state.totalDuration;
             updateDisplay();
@@ -433,24 +437,17 @@ document.addEventListener('DOMContentLoaded', function() {
         toggleTheme();
     });
     
-    // 開始按鈕
+    // 開始按鈕（新計時 or 從暫停繼續）
     dom.startBtn.addEventListener('click', async function() {
         if (state.selectedUser && state.timeLeft > 0 && !state.isRunning) {
             stopAlarmSound(); // 停止可能在播放的警報
+            const isResume = state.isPaused;
             state.isRunning = true;
+            state.isPaused = false;
             dom.startBtn.disabled = true;
             dom.startBtn.classList.remove('active');
             dom.pauseBtn.disabled = false;
             dom.resetBtn.disabled = false;
-
-            state.startTimestamp = new Date();
-            state.lastUpdateTime = Date.now();
-
-            // 使用更高頻率的計時器來防止休眠
-            state.timer = setInterval(updateTimer, 100);
-
-            // 啟動防休眠機制
-            state.preventSleepInterval = setInterval(preventSystemSleep, 30000);
 
             // 放大使用者名稱
             dom.userDisplay.classList.add('timing');
@@ -462,33 +459,52 @@ document.addEventListener('DOMContentLoaded', function() {
                 playSound('start');
             }
 
-            showToast(`${state.selectedUser === 'user1' ? '品瑜' : '品榕'}的計時開始!`);
+            if (isResume) {
+                // 從暫停繼續：通知 main 計時器恢復 tick，不重置 startTimestamp
+                window.api.send('timer-resume');
+                showToast('計時已繼續');
+            } else {
+                // 新開始：通知 main 啟動計時，把參數一起傳過去
+                state.startTimestamp = new Date();
+                window.api.send('timer-start', {
+                    totalDuration: state.totalDuration,
+                    user: state.selectedUser,
+                    category: state.selectedCategory,
+                    startTimestamp: state.startTimestamp.toISOString(),
+                });
+                showToast(`${state.selectedUser === 'user1' ? '品瑜' : '品榕'}的計時開始!`);
+            }
 
             // 更新 Firebase 即時計時狀態
             const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
             if (window.updateLiveTimerStatus) {
+                // resume 時 startTime 要回推（已過時間扣回去），讓家長監控算的剩餘時間正確
+                const elapsedSec = state.totalDuration - state.timeLeft;
                 window.updateLiveTimerStatus(userId, {
                     isRunning: true,
-                    startTime: Date.now(),
+                    startTime: Date.now() - elapsedSec * 1000,
                     totalDuration: state.totalDuration,
                     category: state.selectedCategory
                 });
             }
 
-            // 延遲進入迷你模式，讓用戶看到計時開始
-            setTimeout(() => {
-                enterMiniMode();
-            }, 1000);
+            // 新計時時延遲進入迷你模式（resume 時若已在迷你模式則不需要）
+            if (!isResume) {
+                setTimeout(() => {
+                    enterMiniMode();
+                }, 1000);
+            }
         }
     });
     
-    // 暫停按鈕
+    // 暫停按鈕（通知 main 計時器暫停，state.isPaused=true 用於下次按開始時判斷 resume）
     dom.pauseBtn.addEventListener('click', function() {
         if (state.isRunning) {
             stopAlarmSound(); // 停止可能在播放的警報
             state.isRunning = false;
-            clearInterval(state.timer);
-            clearInterval(state.preventSleepInterval);
+            state.isPaused = true;
+            window.api.send('timer-pause');
+
             dom.startBtn.disabled = false;
             dom.startBtn.classList.add('active');
             dom.pauseBtn.disabled = true;
@@ -516,9 +532,8 @@ document.addEventListener('DOMContentLoaded', function() {
     dom.resetBtn.addEventListener('click', function() {
         stopAlarmSound(); // 停止警報
         state.isRunning = false;
-        clearInterval(state.timer);
-        clearInterval(state.preventSleepInterval);
-        state.lastUpdateTime = null;
+        state.isPaused = false;
+        window.api.send('timer-reset');
         state.timeLeft = state.totalDuration;
         updateDisplay();
         updateProgressBar();
@@ -575,125 +590,164 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // 防止系統休眠的函數
-    function preventSystemSleep() {
-        // 使用微小的DOM更新來保持活動狀態
-        document.title = document.title === '電腦使用時間' ? '電腦使用時間 ⏰' : '電腦使用時間';
-    }
-    
-    // 高精度計時器更新
-    function updateTimer() {
-        const currentTime = Date.now();
-        
-        if (state.lastUpdateTime === null) {
-            state.lastUpdateTime = currentTime;
+    // 主計時 tick 由 main 進程廣播（不被 Chromium 節流）
+    // renderer 收到 tick 後只負責更新顯示
+    window.api.on('timer-tick', (payload) => {
+        if (!payload) return;
+        state.timeLeft = payload.remainingSec;
+        updateDisplay();
+        updateProgressBar();
+        if (state.isRunning && !state.isPaused) {
+            updateSandAnimation();
         }
-        
-        // 計算實際經過的時間（毫秒）
-        const elapsed = Math.floor((currentTime - state.lastUpdateTime) / 1000);
-        
-        if (elapsed >= 1) {
-            if (state.timeLeft > 0) {
-                // 如果系統休眠導致時間跳躍，按實際時間扣除
-                state.timeLeft = Math.max(0, state.timeLeft - elapsed);
-                state.lastUpdateTime = currentTime;
-                updateDisplay();
-                updateProgressBar();
-                updateSandAnimation();
+    });
+
+    // 計時完成（由 main 主動觸發，視窗置頂與恢復已由 main 處理）
+    window.api.on('timer-completed', (snapshot) => {
+        if (!snapshot) return;
+        state.isRunning = false;
+        state.isPaused = false;
+        state.timeLeft = 0;
+
+        // 恢復使用者名稱大小
+        dom.userDisplay.classList.remove('timing');
+
+        const endTimestamp = new Date();
+        const completedUser = snapshot.user;
+        const completedCategory = snapshot.category;
+        const completedDuration = snapshot.totalDuration;
+        const startTimestamp = snapshot.startTimestamp ? new Date(snapshot.startTimestamp) : new Date();
+
+        if (completedUser === 'user1') {
+            state.user1TotalTime += completedDuration;
+            state.user1SessionCount++;
+            if (!state.user1CategoryTime[completedCategory]) {
+                state.user1CategoryTime[completedCategory] = 0;
             }
+            state.user1CategoryTime[completedCategory] += completedDuration;
+        } else if (completedUser === 'user2') {
+            state.user2TotalTime += completedDuration;
+            state.user2SessionCount++;
+            if (!state.user2CategoryTime[completedCategory]) {
+                state.user2CategoryTime[completedCategory] = 0;
+            }
+            state.user2CategoryTime[completedCategory] += completedDuration;
         }
-        
-        if (state.timeLeft <= 0) {
-            clearInterval(state.timer);
-            clearInterval(state.preventSleepInterval);
+
+        updateStatsDisplay();
+        saveLocalBackup();
+
+        const currentSessionCount = completedUser === 'user1' ? state.user1SessionCount : state.user2SessionCount;
+        saveRecordToSheets(completedUser === 'user1' ? '品瑜' : '品榕', completedCategory, completedDuration, startTimestamp, endTimestamp, currentSessionCount);
+
+        checkAchievements();
+
+        dom.sandAnimation.style.display = 'none';
+        dom.completedAnimation.style.display = 'block';
+        dom.completedAnimation.classList.add('fade-in-out');
+
+        dom.startBtn.disabled = true;
+        dom.startBtn.classList.remove('active');
+        dom.pauseBtn.disabled = true;
+        dom.resetBtn.disabled = false;
+
+        // 更新 Firebase 即時計時狀態（計時完成）
+        const userId = completedUser === 'user1' ? 'pinyu' : 'pinrong';
+        if (window.updateLiveTimerStatus) {
+            window.updateLiveTimerStatus(userId, { isRunning: false });
+        }
+
+        playCompletionEffect();
+
+        if (state.soundEnabled) {
+            state.alarmCycleActive = true;
+            state.alarmCycleCount = 0;
+            playSound('complete');
+        }
+
+        showToast('時間到! 🎉');
+
+        setTimeout(() => {
+            dom.completedAnimation.style.display = 'none';
+            dom.completedAnimation.classList.remove('fade-in-out');
+        }, 2000);
+    });
+
+    // 從迷你視窗暫停 → 同步主視窗 UI
+    window.api.on('timer-paused-by-mini', () => {
+        if (state.isRunning) {
             state.isRunning = false;
-            
-            // 確保退出迷你模式
-            ensureExitMiniMode();
-            
-            // 恢復使用者名稱大小
-            dom.userDisplay.classList.remove('timing');
-            
-            const endTimestamp = new Date();
-            
-            // 不在此處記錄冷卻時間，等用戶手動停止警報時再記錄
-            
-            if (state.selectedUser === 'user1') {
-                state.user1TotalTime += state.totalDuration;
-                state.user1SessionCount++;
-                // 追蹤活動類別時間
-                if (!state.user1CategoryTime[state.selectedCategory]) {
-                    state.user1CategoryTime[state.selectedCategory] = 0;
-                }
-                state.user1CategoryTime[state.selectedCategory] += state.totalDuration;
-            } else if (state.selectedUser === 'user2') {
-                state.user2TotalTime += state.totalDuration;
-                state.user2SessionCount++;
-                // 追蹤活動類別時間
-                if (!state.user2CategoryTime[state.selectedCategory]) {
-                    state.user2CategoryTime[state.selectedCategory] = 0;
-                }
-                state.user2CategoryTime[state.selectedCategory] += state.totalDuration;
-            }
-            
-            updateStatsDisplay();
-            saveLocalBackup();
-            
-            // 保存記錄到Google Sheets
-            const currentSessionCount = state.selectedUser === 'user1' ? state.user1SessionCount : state.user2SessionCount;
-            saveRecordToSheets(state.selectedUser === 'user1' ? '品瑜' : '品榕', state.selectedCategory, state.totalDuration, state.startTimestamp, endTimestamp, currentSessionCount);
-            
-            checkAchievements();
-            
-            dom.sandAnimation.style.display = 'none';
-            dom.completedAnimation.style.display = 'block';
-            dom.completedAnimation.classList.add('fade-in-out');
-            
-            dom.startBtn.disabled = true;
-            dom.startBtn.classList.remove('active');
+            state.isPaused = true;
+            dom.startBtn.disabled = false;
+            dom.startBtn.classList.add('active');
             dom.pauseBtn.disabled = true;
-            dom.resetBtn.disabled = false;
-            
-            // 更新 Firebase 即時計時狀態（計時完成）
+            dom.userDisplay.classList.remove('timing');
+            dom.sandAnimation.style.display = 'none';
+            if (state.soundEnabled) playSound('pause');
+            showToast('計時已暫停');
             const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
             if (window.updateLiveTimerStatus) {
                 window.updateLiveTimerStatus(userId, { isRunning: false });
             }
-
-            // 通知主進程將窗口置頂
-            window.api.send('timer-completed-show-window');
-            
-            playCompletionEffect();
-            
-            if (state.soundEnabled) {
-                // 激活警報循環，重置計數器
-                state.alarmCycleActive = true;
-                state.alarmCycleCount = 0;
-                playSound('complete');
-            }
-            
-            showToast('時間到! 🎉');
-            
-            setTimeout(() => {
-                dom.completedAnimation.style.display = 'none';
-                dom.completedAnimation.classList.remove('fade-in-out');
-            }, 2000);
         }
-    }
+    });
+
+    // 從迷你視窗繼續 → 同步主視窗 UI
+    window.api.on('timer-resumed-by-mini', () => {
+        if (state.isPaused) {
+            state.isRunning = true;
+            state.isPaused = false;
+            dom.startBtn.disabled = true;
+            dom.startBtn.classList.remove('active');
+            dom.pauseBtn.disabled = false;
+            dom.userDisplay.classList.add('timing');
+            dom.sandAnimation.style.display = 'block';
+            startSandAnimation();
+            if (state.soundEnabled) playSound('start');
+            showToast('計時已繼續');
+            const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
+            if (window.updateLiveTimerStatus) {
+                const elapsedSec = state.totalDuration - state.timeLeft;
+                window.updateLiveTimerStatus(userId, {
+                    isRunning: true,
+                    startTime: Date.now() - elapsedSec * 1000,
+                    totalDuration: state.totalDuration,
+                    category: state.selectedCategory,
+                });
+            }
+        }
+    });
+
+    // 從迷你視窗結束 → 同步主視窗 UI（main 已重置 timer + 恢復視窗）
+    window.api.on('timer-stopped-by-mini', () => {
+        state.isRunning = false;
+        state.isPaused = false;
+        state.timeLeft = state.totalDuration;
+        updateDisplay();
+        updateProgressBar();
+
+        dom.startBtn.disabled = false;
+        dom.startBtn.classList.add('active');
+        dom.pauseBtn.disabled = true;
+        dom.resetBtn.disabled = true;
+        dom.userDisplay.classList.remove('timing');
+        dom.sandAnimation.style.display = 'none';
+        dom.completedAnimation.style.display = 'none';
+        if (state.soundEnabled) playSound('reset');
+        showToast('計時已結束');
+
+        const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
+        if (window.updateLiveTimerStatus) {
+            window.updateLiveTimerStatus(userId, { isRunning: false });
+        }
+    });
     
-    // 更新顯示
+    // 更新顯示（主視窗顯示用，迷你視窗的時間由 main 進程直接廣播）
     function updateDisplay() {
         const minutes = Math.floor(state.timeLeft / 60);
         const seconds = state.timeLeft % 60;
         const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        
         dom.timeDisplay.textContent = timeString;
-        
-        // 如果在迷你模式中，同時更新迷你顯示和IPC通信
-        // 迷你視窗模式：透過 IPC 更新獨立小視窗的顯示
-        if (state.isMiniMode) {
-            window.api.send('update-mini-timer', state.timeLeft, state.selectedUser === 'user1' ? '品瑜' : '品榕');
-        }
     }
     
     // 更新進度條
@@ -761,7 +815,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
         try {
             const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            
+
+            // 視窗被遮擋時 AudioContext 可能是 suspended → 強制 resume 才能發聲
+            // resume() 是 async 但不需 await，瀏覽器會自行處理
+            if (audioContext.state === 'suspended') {
+                audioContext.resume().catch(e => console.warn('AudioContext resume 失敗:', e));
+            }
+
             if (type === 'complete') {
                 // 如果已經有警報在播放，則不重複啟動
                 if (state.alarmAudio && state.alarmAudio.context.state === 'running') {
@@ -1376,14 +1436,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // 計時結束時確保退出迷你模式
-    function ensureExitMiniMode() {
-        if (state.isMiniMode) {
-            console.log('計時結束，退出迷你視窗模式');
-            exitMiniMode();
-        }
-    }
-    
     // === 身份綁定系統 ===
 
     // 初始化用戶選擇（身份綁定）

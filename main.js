@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, screen, ipcMain, Tray, globalShortcut, powerMonitor } = require('electron');
+const { app, BrowserWindow, Menu, screen, ipcMain, Tray, globalShortcut, powerMonitor, powerSaveBlocker } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const axios = require('axios');
@@ -7,6 +7,12 @@ const axios = require('axios');
 // 只有在 app 可用時才呼叫
 if (app && typeof app.disableHardwareAcceleration === 'function') {
   app.disableHardwareAcceleration();
+}
+
+// 解除 Chromium 的 autoplay 限制 — 讓計時完成警報音能在背景播放
+// 必須在 app ready 之前呼叫
+if (app && typeof app.commandLine !== 'undefined') {
+  app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
 }
 
 // 自動更新器設定會在 app.whenReady() 之後初始化
@@ -28,6 +34,189 @@ let activityCheckInterval = null;
 // 冷卻期活動偵測
 let cooldownEndTime = 0; // 冷卻期結束時間
 let cooldownReminderShowing = false; // 是否正在顯示冷卻期提醒
+
+// === 主進程計時器（source of truth，不被 Chromium 節流） ===
+let timerState = {
+  isRunning: false,        // 是否進行中（含暫停）
+  isPaused: false,         // 是否暫停
+  totalDuration: 0,        // 總秒數
+  remainingSec: 0,         // 剩餘秒數
+  startTime: 0,            // Date.now() 起算
+  pauseStartTime: 0,       // 本次暫停的起點
+  accumulatedPauseMs: 0,   // 累計已暫停的毫秒數
+  user: null,              // 'user1' | 'user2'
+  category: null,          // 活動類別
+  startTimestamp: null,    // ISO 字串（給 Firebase 記錄）
+};
+let timerTickInterval = null;
+let powerSaveBlockerId = null;
+
+// 廣播計時 tick 給主視窗 + 迷你視窗
+function broadcastTick() {
+  const minutes = Math.floor(timerState.remainingSec / 60);
+  const seconds = timerState.remainingSec % 60;
+  const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  const userName = timerState.user === 'user1' ? '品瑜' : '品榕';
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('timer-tick', {
+      isRunning: timerState.isRunning,
+      isPaused: timerState.isPaused,
+      remainingSec: timerState.remainingSec,
+      totalDuration: timerState.totalDuration,
+      user: timerState.user,
+    });
+  }
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.webContents.send('update-mini-display', timeString, userName);
+  }
+}
+
+// 每 tick 計算實際剩餘時間（用 Date.now 當基準，不依賴 interval 精度）
+function tick() {
+  if (!timerState.isRunning || timerState.isPaused) return;
+  const elapsedMs = Date.now() - timerState.startTime - timerState.accumulatedPauseMs;
+  const elapsedSec = Math.floor(elapsedMs / 1000);
+  const newRemaining = Math.max(0, timerState.totalDuration - elapsedSec);
+
+  if (newRemaining !== timerState.remainingSec) {
+    timerState.remainingSec = newRemaining;
+    broadcastTick();
+  }
+
+  if (newRemaining <= 0) {
+    completeTimer();
+  }
+}
+
+// 啟動 powerSaveBlocker（防止系統/應用被掛起）
+function startPowerSaveBlocker() {
+  if (powerSaveBlockerId !== null) return;
+  try {
+    powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+    console.log('🔋 powerSaveBlocker 已啟動 id:', powerSaveBlockerId);
+  } catch (e) {
+    console.error('powerSaveBlocker 啟動失敗:', e);
+  }
+}
+
+function stopPowerSaveBlocker() {
+  if (powerSaveBlockerId === null) return;
+  try {
+    if (powerSaveBlocker.isStarted(powerSaveBlockerId)) {
+      powerSaveBlocker.stop(powerSaveBlockerId);
+      console.log('🔋 powerSaveBlocker 已停止');
+    }
+  } catch (e) {
+    console.error('powerSaveBlocker 停止失敗:', e);
+  }
+  powerSaveBlockerId = null;
+}
+
+// 開始新計時
+function startMainTimer({ totalDuration, user, category, startTimestamp }) {
+  if (timerTickInterval) {
+    clearInterval(timerTickInterval);
+    timerTickInterval = null;
+  }
+  timerState = {
+    isRunning: true,
+    isPaused: false,
+    totalDuration,
+    remainingSec: totalDuration,
+    startTime: Date.now(),
+    pauseStartTime: 0,
+    accumulatedPauseMs: 0,
+    user,
+    category,
+    startTimestamp,
+  };
+  startPowerSaveBlocker();
+  // 每 250ms tick 一次（顯示精度仍是秒，但反應更靈敏）
+  timerTickInterval = setInterval(tick, 250);
+  broadcastTick();
+  console.log('⏱️ 主進程計時開始:', { totalDuration, user, category });
+}
+
+function pauseMainTimer() {
+  if (!timerState.isRunning || timerState.isPaused) return;
+  timerState.isPaused = true;
+  timerState.pauseStartTime = Date.now();
+  broadcastTick();
+  console.log('⏸️ 主進程計時暫停，剩餘:', timerState.remainingSec, '秒');
+}
+
+function resumeMainTimer() {
+  if (!timerState.isRunning || !timerState.isPaused) return;
+  const pausedMs = Date.now() - timerState.pauseStartTime;
+  timerState.accumulatedPauseMs += pausedMs;
+  timerState.isPaused = false;
+  timerState.pauseStartTime = 0;
+  broadcastTick();
+  console.log('▶️ 主進程計時繼續，剩餘:', timerState.remainingSec, '秒');
+}
+
+function resetMainTimer() {
+  if (timerTickInterval) {
+    clearInterval(timerTickInterval);
+    timerTickInterval = null;
+  }
+  timerState.isRunning = false;
+  timerState.isPaused = false;
+  timerState.remainingSec = timerState.totalDuration;
+  stopPowerSaveBlocker();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('timer-reset-confirmed');
+  }
+  console.log('🔄 主進程計時重置');
+}
+
+// 計時自然完成 → 主動恢復視窗 + 通知 renderer 跑後續流程
+function completeTimer() {
+  if (timerTickInterval) {
+    clearInterval(timerTickInterval);
+    timerTickInterval = null;
+  }
+  const completedSnapshot = {
+    user: timerState.user,
+    category: timerState.category,
+    totalDuration: timerState.totalDuration,
+    startTimestamp: timerState.startTimestamp,
+  };
+  timerState.isRunning = false;
+  timerState.isPaused = false;
+  timerState.remainingSec = 0;
+  stopPowerSaveBlocker();
+
+  // 主動恢復視窗（不依賴 renderer 是否被節流）
+  if (isMinimized) {
+    console.log('計時完成：從迷你模式恢復');
+    restoreFromMiniMode();
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // screen-saver level：能蓋過其他應用的全螢幕模式（如 Chrome 全螢幕看 YouTube）
+    mainWindow.setAlwaysOnTop(true, 'screen-saver');
+    mainWindow.show();
+    mainWindow.focus();
+    // 工具列圖示閃爍：即使視窗仍被擋住，也能引起注意
+    mainWindow.flashFrame(true);
+
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.setAlwaysOnTop(false);
+        mainWindow.flashFrame(false);
+      }
+    }, 5000);
+
+    // 給視窗 100ms 暖機時間（讓 renderer 從遮擋狀態變可見），再通知跑警報音效
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('timer-completed', completedSnapshot);
+      }
+    }, 100);
+  }
+  console.log('🔔 主進程計時完成:', completedSnapshot);
+}
 
 // 視窗狀態儲存/載入（路徑延遲取得，避免 app 未就緒）
 let windowStatePath = null;
@@ -96,6 +285,7 @@ function createWindow() {
       preload: path.join(__dirname, 'src', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // 防止視窗被遮擋時 Chromium 節流計時器
     },
     icon: path.join(__dirname, 'assets', 'icon.png'),
     title: '電腦使用時間追蹤器',
@@ -258,6 +448,7 @@ function createMiniWindow(timeString, userName) {
       preload: path.join(__dirname, 'src', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      backgroundThrottling: false, // 防止視窗被遮擋時 Chromium 節流計時器
     },
   };
 
@@ -680,14 +871,51 @@ function setupIpcHandlers() {
     }
   });
 
-  // 更新迷你視窗顯示
-  ipcMain.on('update-mini-timer', (event, timeLeft, user) => {
-    if (miniWindow && !miniWindow.isDestroyed()) {
-      const minutes = Math.floor(timeLeft / 60);
-      const seconds = timeLeft % 60;
-      const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-      miniWindow.webContents.send('update-mini-display', timeString, user);
+  // === 主進程計時器控制 IPC ===
+  // renderer 點「開始」→ 啟動 main 計時器
+  ipcMain.on('timer-start', (event, opts) => {
+    if (!opts || !opts.totalDuration || !opts.user) {
+      console.warn('timer-start 缺少必要參數:', opts);
+      return;
     }
+    startMainTimer({
+      totalDuration: opts.totalDuration,
+      user: opts.user,
+      category: opts.category || null,
+      startTimestamp: opts.startTimestamp || new Date().toISOString(),
+    });
+  });
+
+  // renderer 點「暫停」
+  ipcMain.on('timer-pause', () => {
+    pauseMainTimer();
+  });
+
+  // renderer 點「繼續」（從暫停恢復）
+  ipcMain.on('timer-resume', () => {
+    if (!timerState.isRunning) {
+      console.warn('timer-resume 收到但 timerState 未啟動，忽略');
+      return;
+    }
+    resumeMainTimer();
+  });
+
+  // renderer 點「重置」
+  ipcMain.on('timer-reset', () => {
+    resetMainTimer();
+  });
+
+  // renderer 查詢當前計時狀態（用於頁面 reload 後重建 UI）
+  ipcMain.handle('timer-get-state', () => {
+    return {
+      isRunning: timerState.isRunning,
+      isPaused: timerState.isPaused,
+      remainingSec: timerState.remainingSec,
+      totalDuration: timerState.totalDuration,
+      user: timerState.user,
+      category: timerState.category,
+      startTimestamp: timerState.startTimestamp,
+    };
   });
 
   // 進入迷你模式（renderer 提供計時資料後觸發）
@@ -700,31 +928,34 @@ function setupIpcHandlers() {
     }
   });
 
-  // 迷你視窗：暫停
+  // 迷你視窗：暫停 → 直接呼叫主計時器 + 通知主視窗 UI 同步
   ipcMain.on('mini-pause', () => {
+    pauseMainTimer();
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('global-shortcut', 'pause');
+      mainWindow.webContents.send('timer-paused-by-mini');
     }
     if (miniWindow && !miniWindow.isDestroyed()) {
       miniWindow.webContents.send('mini-pause-state', true);
     }
   });
 
-  // 迷你視窗：繼續
+  // 迷你視窗：繼續 → 直接呼叫主計時器 + 通知主視窗 UI 同步
   ipcMain.on('mini-resume', () => {
+    resumeMainTimer();
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('global-shortcut', 'pause');
+      mainWindow.webContents.send('timer-resumed-by-mini');
     }
     if (miniWindow && !miniWindow.isDestroyed()) {
       miniWindow.webContents.send('mini-pause-state', false);
     }
   });
 
-  // 迷你視窗：結束計時
+  // 迷你視窗：結束計時 → 直接呼叫主計時器 + 通知主視窗 UI 同步
   ipcMain.on('mini-stop', () => {
     console.log('迷你視窗請求結束計時');
+    resetMainTimer();
     if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('global-shortcut', 'stop');
+      mainWindow.webContents.send('timer-stopped-by-mini');
     }
     restoreFromMiniMode();
   });
@@ -744,33 +975,7 @@ function setupIpcHandlers() {
     }
   });
 
-  // 計時結束時將窗口置頂
-  ipcMain.on('timer-completed-show-window', (event) => {
-    console.log('收到計時完成通知，將窗口置頂');
-    
-    if (mainWindow) {
-      // 如果在迷你模式，先恢復正常模式
-      if (isMinimized) {
-        console.log('從迷你模式恢復並置頂');
-        restoreFromMiniMode();
-      }
-      
-      // 顯示窗口並置頂
-      mainWindow.show();
-      mainWindow.focus();
-      mainWindow.setAlwaysOnTop(true);
-      
-      // 5秒後取消置頂狀態，避免永久置頂
-      setTimeout(() => {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.setAlwaysOnTop(false);
-          console.log('取消窗口置頂狀態');
-        }
-      }, 5000);
-      
-      console.log('窗口已置頂並獲得焦點');
-    }
-  });
+  // 計時完成的視窗置頂與從迷你模式恢復，已由 main 進程的 completeTimer() 主動處理
 
   // 處理來自渲染進程的手動恢復請求（從迷你模式退出）
   ipcMain.on('exit-mini-mode', (event) => {
@@ -850,12 +1055,13 @@ function setupIpcHandlers() {
     }
   });
 
-  // 計時完成音效循環後強制置頂
+  // 計時完成音效循環後強制置頂（screen-saver level 能蓋過全螢幕應用）
   ipcMain.on('force-window-top', () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
       mainWindow.show();
-      mainWindow.setAlwaysOnTop(true);
       mainWindow.focus();
+      mainWindow.flashFrame(true);
     }
   });
 
