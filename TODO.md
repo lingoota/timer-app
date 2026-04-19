@@ -1,8 +1,8 @@
 # 📝 時間追蹤器 Family 版 Todo List
 
 > **專案**: 時間追蹤器家庭版 (Time Calculator - Family Edition)
-> **最後更新**: 2026-04-18
-> **狀態**: v2.0.0-beta.19 開發中（重構：計時 tick 搬到 main 進程，根治背景節流問題）
+> **最後更新**: 2026-04-19
+> **狀態**: v2.0.0-beta.19 已發布（等待小孩端真實環境測試）
 
 本文件管理家庭版的開發計劃與待辦事項。
 
@@ -10,24 +10,19 @@
 
 ## 🔜 下次重點
 
-### v2.0.0-beta.19 待測試（重構：計時 tick 搬到 main 進程）
+### 等待 v2.0.0-beta.19 真實環境測試結果
 
-**問題背景**：使用者反映瀏覽器全螢幕看 YouTube 時，迷你計時器顯示卡在 19:59，點程式才突然響警報。原因是 Chromium 把 renderer 的 setInterval 嚴重節流。
+**已發布**：https://github.com/lingoota/timer-app/releases/tag/v2.0.0-beta.19
+**已驗證**：2 分鐘測試 → 成功覆蓋全螢幕 YouTube + 警報音正常響
 
-**修復方式**（三重保險）：
-1. ✅ 計時 tick 搬到 main 進程（Node.js timer 不被 Chromium 節流）
-2. ✅ 兩個 BrowserWindow 加 `backgroundThrottling: false`
-3. ✅ 計時時啟動 `powerSaveBlocker.start('prevent-app-suspension')`
-
-**待手動測試項目**：
-- [ ] 開瀏覽器全螢幕 YouTube，計時 20 分鐘 → 警報是否準時、迷你視窗顯示是否準時
+**待真實環境驗證**：
+- [ ] **主要場景**：開瀏覽器全螢幕 YouTube，計時 20 分鐘 → 警報是否準時、迷你視窗顯示是否準時
 - [ ] 主畫面點開始 → 計時運作正常、進入迷你模式正常
 - [ ] 主畫面點暫停 → 計時暫停、再點開始 → 從剩餘時間繼續
 - [ ] 主畫面點重置 → 計時歸零
 - [ ] 迷你視窗點暫停/繼續 → 主視窗 UI 同步、計時準確
 - [ ] 迷你視窗點結束 → 回到主視窗、計時器歸零
 - [ ] 計時自然完成 → 視窗從迷你模式恢復、置頂、警報音響、Firebase 寫入記錄、家長監控狀態歸零
-- [ ] 計時中改活動類別/時間（理論上 isRunning=true 時無法改，但確認一下）
 - [ ] 警報音效循環第 2 次強制置頂
 - [ ] 暫停後改時間 → 視為新計時（不會被當成 resume）
 
@@ -55,7 +50,7 @@
 
 ## ✅ 已完成功能總覽
 
-### v2.0.0-beta.19（2026-04-18）🚧 開發中
+### v2.0.0-beta.19（2026-04-19）✅ 已發布
 - 🔧 重構：計時 tick 搬到 main 進程（Node.js timer 不被 Chromium 節流）
 - 🔋 計時時啟動 powerSaveBlocker 防止應用被掛起
 - 🚫 兩個 BrowserWindow 加 backgroundThrottling: false
