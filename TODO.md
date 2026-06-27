@@ -1,14 +1,41 @@
 # 📝 時間追蹤器 Family 版 Todo List
 
 > **專案**: 時間追蹤器家庭版 (Time Calculator - Family Edition)
-> **最後更新**: 2026-04-19
-> **狀態**: v2.0.0-beta.19 已發布（等待小孩端真實環境測試）
+> **最後更新**: 2026-06-27
+> **狀態**: v2.0.0-beta.20 已發布（等待小孩端真實環境測試）
 
 本文件管理家庭版的開發計劃與待辦事項。
 
 ---
 
 ## 🔜 下次重點
+
+### 🔑 GitHub PAT「Timer App Release」清理（2026-04-27 開工）
+
+**背景**：GitHub 通知 PAT `ghp_CHQ95...`（名稱：Timer App Release，scope: repo）將於 7 天後到期。
+
+**已釐清**：
+- 此 PAT 被設成系統環境變數 `GITHUB_TOKEN`，gh CLI 預設用它
+- gh CLI 另有 keyring OAuth token（`gho_*`，永不過期，scope 更完整：`gist, read:org, repo, workflow`）
+- 專案沒用到此 token（electron-builder 是 `--publish=never`、無 GH Actions、grep 過原始碼無引用）
+- 結論：PAT 可廢，環境變數移除後 gh 會自動 fallback 到 OAuth
+
+**進度**：
+- [x] 已執行 `setx GITHUB_TOKEN ""`（2026-04-27 09:48）
+- [ ] **待使用者**：關掉所有終端機 / VS Code 重開
+- [ ] **待驗證**：重開後跑 `gh auth status`，確認 `Active account: true` 出現在 `(keyring)` 那行
+- [ ] **待使用者**：到 https://github.com/settings/tokens 刪掉「Timer App Release」
+
+---
+
+### 等待 v2.0.0-beta.20 休息機制「1:1 體感」真實環境測試
+
+**已發布**：https://github.com/lingoota/timer-app/releases/tag/v2.0.0-beta.20
+**改動**：休息時間 = 實際使用時間（1:1，不設上下限），提前結束也按比例休息
+**已驗證**：自然完成 10 分→休 10 分；提前結束 6 秒→休 6 秒
+**待觀察**：用 30 分要休 30 分，小孩實際體感是否合理 → 評估是否需調整比例（如 1:2）或加上下限
+
+---
 
 ### 等待 v2.0.0-beta.19 真實環境測試結果
 

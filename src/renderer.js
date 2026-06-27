@@ -94,7 +94,7 @@ document.addEventListener('DOMContentLoaded', function() {
         alarmTimeout: null, // 用於自動停止1分鐘警報
         lastCompletionTime: null, // 上次計時完成的時間
         isParentMode: false,  // 新增：家長觀察模式
-        cooldownDuration: 5 * 60 * 1000, // 5分鐘冷卻期（毫秒）
+        cooldownDuration: 5 * 60 * 1000, // 休息冷卻期（毫秒）；每次結束時依「實際用掉的時間」動態設定（1:1）
         cooldownUpdateInterval: null, // 冷卻期更新定時器
         alarmCycleTimeout: null, // 警報循環定時器
         alarmCycleActive: false, // 警報循環是否激活
@@ -255,10 +255,12 @@ document.addEventListener('DOMContentLoaded', function() {
             dom.startBtn.disabled = true;
             dom.startBtn.classList.remove('active');
             
-            // 如果是冷卻期限制，顯示剩餘時間
+            // 如果是冷卻期限制，顯示剩餘休息時間（精準到秒）
             if (basicConditionsMet && !cooldownMet) {
-                const minutes = Math.ceil(remainingCooldown / (60 * 1000));
-                dom.startBtn.textContent = `冷卻中 (${minutes}分鐘)`;
+                const totalSec = Math.ceil(remainingCooldown / 1000);
+                const min = Math.floor(totalSec / 60);
+                const sec = totalSec % 60;
+                dom.startBtn.textContent = min > 0 ? `休息中 ${min}分${sec}秒` : `休息中 ${sec}秒`;
             } else {
                 dom.startBtn.textContent = '開始';
             }
@@ -530,7 +532,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 重置按鈕
     dom.resetBtn.addEventListener('click', function() {
-        stopAlarmSound(); // 停止警報
+        // 先擷取「實際用掉的時間」，再歸零（提前結束也要按比例休息）
+        const usedSeconds = Math.max(0, state.totalDuration - state.timeLeft);
+        stopAlarmSound(); // 停止警報（自然完成後改按重置時，這裡會先啟動冷卻期）
         state.isRunning = false;
         state.isPaused = false;
         window.api.send('timer-reset');
@@ -565,8 +569,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.updateLiveTimerStatus) {
             window.updateLiveTimerStatus(userId, { isRunning: false });
         }
+
+        // 依實際用掉的時間啟動休息冷卻期（若上面 stopAlarmSound 已啟動則會被擋掉）
+        beginCooldown(usedSeconds);
     });
-    
+
     // 停止警報按鈕
     dom.stopAlarmBtn.addEventListener('click', function() {
         stopAlarmSound();
@@ -720,6 +727,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 從迷你視窗結束 → 同步主視窗 UI（main 已重置 timer + 恢復視窗）
     window.api.on('timer-stopped-by-mini', () => {
+        // 先擷取「實際用掉的時間」，再歸零（提前結束也要按比例休息）
+        const usedSeconds = Math.max(0, state.totalDuration - state.timeLeft);
         state.isRunning = false;
         state.isPaused = false;
         state.timeLeft = state.totalDuration;
@@ -740,8 +749,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.updateLiveTimerStatus) {
             window.updateLiveTimerStatus(userId, { isRunning: false });
         }
+
+        // 依實際用掉的時間啟動休息冷卻期
+        beginCooldown(usedSeconds);
     });
-    
+
     // 更新顯示（主視窗顯示用，迷你視窗的時間由 main 進程直接廣播）
     function updateDisplay() {
         const minutes = Math.floor(state.timeLeft / 60);
@@ -949,14 +961,12 @@ document.addEventListener('DOMContentLoaded', function() {
             state.alarmCycleTimeout = null;
         }
         
-        // 記錄手動停止警報的時間（用於冷卻期計算）
+        // 警報期間手動停止 → 計時自然完成，依「用掉全程時間」啟動休息冷卻期
+        // （此分支只在自然完成時成立，因為 alarmCycleActive 在完成時才設 true）
         if (state.alarmCycleActive || state.alarmAudio) {
-            state.lastCompletionTime = Date.now();
-            console.log('手動停止警報，開始冷卻期');
-            // 啟動冷卻期更新定時器
-            startCooldownUpdate();
-            // 通知主程序開始冷卻期活動偵測
-            window.api.send('cooldown-started');
+            const usedSeconds = Math.max(0, state.totalDuration - state.timeLeft);
+            console.log('手動停止警報，開始休息冷卻期');
+            beginCooldown(usedSeconds);
         }
         
         // 停止警報循環，重置計數器
@@ -1915,6 +1925,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         showToast('休息時間結束，可以重新計時了！');
     });
+
+    // 依「實際用掉的時間」啟動休息冷卻期（1:1：用多久休多久，不設上下限）
+    // usedSeconds：這一輪實際用掉的秒數（= totalDuration − 結束時的剩餘秒數，暫停時間不計）
+    function beginCooldown(usedSeconds) {
+        // 沒實際用到時間就不休息（例如還沒開始計時就按重置）
+        if (!usedSeconds || usedSeconds <= 0) return;
+        // 防止同一次結束重複觸發（例如重置時警報剛好在響，stopAlarmSound 與重置各算一次）
+        if (state.cooldownUpdateInterval) return;
+
+        state.cooldownDuration = usedSeconds * 1000; // 1:1，秒 → 毫秒
+        state.lastCompletionTime = Date.now();
+        console.log(`開始休息冷卻期：用了 ${usedSeconds} 秒 → 休息 ${usedSeconds} 秒`);
+
+        // 啟動冷卻期更新定時器
+        startCooldownUpdate();
+        // 立即更新開始按鈕為休息中狀態
+        checkStartButtonState();
+        // 通知主程序開始冷卻期活動偵測，帶上動態休息時長（毫秒）
+        window.api.send('cooldown-started', state.cooldownDuration);
+    }
 
     // 啟動冷卻期更新定時器
     function startCooldownUpdate() {

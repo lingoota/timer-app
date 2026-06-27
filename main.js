@@ -1072,11 +1072,13 @@ function setupIpcHandlers() {
     exec('powershell -Command "(Add-Type -MemberDefinition \'[DllImport(\\\"user32.dll\\\")] public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);\' -Name ScreenOff -Namespace Win32 -PassThru)::SendMessage(-1, 0x0112, 0xF170, 2)"');
   });
 
-  // 冷卻期開始（計時完成停止警報後）
-  ipcMain.on('cooldown-started', () => {
-    cooldownEndTime = Date.now() + 5 * 60 * 1000;
+  // 冷卻期開始（計時結束後）：依 renderer 傳來的動態休息時長（毫秒）設定
+  // 休息時間 = 實際用掉的時間（1:1）；未帶值時 fallback 5 分鐘
+  ipcMain.on('cooldown-started', (event, durationMs) => {
+    const ms = (typeof durationMs === 'number' && durationMs > 0) ? durationMs : 5 * 60 * 1000;
+    cooldownEndTime = Date.now() + ms;
     cooldownReminderShowing = false;
-    console.log('❄️ 冷卻期開始，5 分鐘後結束');
+    console.log(`❄️ 休息冷卻期開始，${Math.round(ms / 1000)} 秒後結束`);
   });
 
   // 冷卻期提醒已關閉
