@@ -532,9 +532,12 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 重置按鈕
     dom.resetBtn.addEventListener('click', function() {
-        // 先擷取「實際用掉的時間」，再歸零（提前結束也要按比例休息）
-        const usedSeconds = Math.max(0, state.totalDuration - state.timeLeft);
-        stopAlarmSound(); // 停止警報（自然完成後改按重置時，這裡會先啟動冷卻期）
+        // 只有「進行中或暫停中」的真實使用才按用掉時間休息。
+        // 自然完成（已由 timer-completed 啟動休息）或還沒開始就按重置 → 不觸發休息，
+        // 避免「按重置就被要求休息整個選定時間」的問題。
+        const wasLiveSession = state.isRunning || state.isPaused;
+        const usedSeconds = wasLiveSession ? Math.max(0, state.totalDuration - state.timeLeft) : 0;
+        stopAlarmSound(); // 停止警報
         state.isRunning = false;
         state.isPaused = false;
         window.api.send('timer-reset');
@@ -624,6 +627,10 @@ document.addEventListener('DOMContentLoaded', function() {
         const completedCategory = snapshot.category;
         const completedDuration = snapshot.totalDuration;
         const startTimestamp = snapshot.startTimestamp ? new Date(snapshot.startTimestamp) : new Date();
+
+        // 計時到了 → 立刻開始算休息（不等使用者按掉警報）
+        // 小孩看到時間到就離開電腦休息，回來按結束時不該才開始倒數休息
+        beginCooldown(completedDuration);
 
         if (completedUser === 'user1') {
             state.user1TotalTime += completedDuration;
@@ -727,8 +734,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 從迷你視窗結束 → 同步主視窗 UI（main 已重置 timer + 恢復視窗）
     window.api.on('timer-stopped-by-mini', () => {
-        // 先擷取「實際用掉的時間」，再歸零（提前結束也要按比例休息）
-        const usedSeconds = Math.max(0, state.totalDuration - state.timeLeft);
+        // 只有「進行中或暫停中」才按用掉時間休息（同重置邏輯，避免完成後誤觸發）
+        const wasLiveSession = state.isRunning || state.isPaused;
+        const usedSeconds = wasLiveSession ? Math.max(0, state.totalDuration - state.timeLeft) : 0;
         state.isRunning = false;
         state.isPaused = false;
         state.timeLeft = state.totalDuration;
@@ -961,13 +969,8 @@ document.addEventListener('DOMContentLoaded', function() {
             state.alarmCycleTimeout = null;
         }
         
-        // 警報期間手動停止 → 計時自然完成，依「用掉全程時間」啟動休息冷卻期
-        // （此分支只在自然完成時成立，因為 alarmCycleActive 在完成時才設 true）
-        if (state.alarmCycleActive || state.alarmAudio) {
-            const usedSeconds = Math.max(0, state.totalDuration - state.timeLeft);
-            console.log('手動停止警報，開始休息冷卻期');
-            beginCooldown(usedSeconds);
-        }
+        // 註：休息冷卻期已在計時完成當下（timer-completed）啟動，
+        // 按掉警報只負責停止聲音，不再重複觸發休息。
         
         // 停止警報循環，重置計數器
         state.alarmCycleActive = false;
