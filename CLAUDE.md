@@ -3,7 +3,7 @@
 ## 專案概覽
 
 **專案名稱**: 時間追蹤器家庭版 (Time Calculator - Family Edition)
-**當前版本**: v2.0.0-beta.21
+**當前版本**: v2.0.0-beta.22
 **技術架構**: Electron + HTML/CSS/JavaScript + Firebase Firestore
 **GitHub**: https://github.com/lingoota/timer-app
 

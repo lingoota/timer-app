@@ -99,6 +99,8 @@ document.addEventListener('DOMContentLoaded', function() {
         alarmCycleTimeout: null, // 警報循環定時器
         alarmCycleActive: false, // 警報循環是否激活
         alarmCycleCount: 0, // 警報循環次數計數
+        alarmCycleStartTime: null, // 警報循環開始時間（用於上限判斷）
+        alarmMaxDuration: 20 * 60 * 1000, // 警報最長持續時間（20分鐘），超過自動停止避免沒人時無止盡循環
         // 用戶活動類別時間追蹤
         user1CategoryTime: {},
         user2CategoryTime: {},
@@ -676,6 +678,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (state.soundEnabled) {
             state.alarmCycleActive = true;
             state.alarmCycleCount = 0;
+            state.alarmCycleStartTime = Date.now(); // 記錄起始時間，供警報上限判斷
             playSound('complete');
         }
 
@@ -882,8 +885,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     }
                     state.alarmTimeout = null;
 
-                    // 如果警報循環激活，30秒後重新啟動警報
-                    if (state.alarmCycleActive) {
+                    // 警報上限檢查：循環超過 alarmMaxDuration（20分鐘）就自動停止，
+                    // 避免家裡沒人時警報無止盡循環、視窗一直跳上來
+                    const alarmElapsed = state.alarmCycleStartTime ? (Date.now() - state.alarmCycleStartTime) : 0;
+                    const alarmCapReached = alarmElapsed >= state.alarmMaxDuration;
+
+                    // 如果警報循環激活且未達上限，30秒後重新啟動警報
+                    if (state.alarmCycleActive && !alarmCapReached) {
                         state.alarmCycleCount++;
                         showToast('警報音效已停止，30秒後將重新提醒');
                         state.alarmCycleTimeout = setTimeout(() => {
@@ -897,7 +905,17 @@ document.addEventListener('DOMContentLoaded', function() {
                             }
                         }, 30000); // 30秒後重新啟動
                     } else {
-                        showToast('警報音效已自動停止');
+                        // 達上限或循環已關閉 → 收尾停止（休息倒數不受影響，仍在背景跑）
+                        if (alarmCapReached) {
+                            console.log('警報已達 20 分鐘上限，自動停止');
+                            showToast('警報已響 20 分鐘，自動停止（休息倒數仍在進行）');
+                        } else {
+                            showToast('警報音效已自動停止');
+                        }
+                        state.alarmCycleActive = false;
+                        state.alarmCycleCount = 0;
+                        state.alarmCycleStartTime = null;
+                        window.api.send('cancel-always-on-top');
                         hideAlarmStopButton();
                     }
                 }, 60000); // 60秒 = 1分鐘
@@ -975,6 +993,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 停止警報循環，重置計數器
         state.alarmCycleActive = false;
         state.alarmCycleCount = 0;
+        state.alarmCycleStartTime = null;
         // 取消視窗置頂
         window.api.send('cancel-always-on-top');
         
