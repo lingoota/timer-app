@@ -142,8 +142,21 @@
     btnScreenOff.addEventListener('click', () => window.api.send('rest-action', 'screen-off'));
     btnMusic.addEventListener('click', () => window.api.send('rest-action', 'music'));
     el('btn-media-prev').addEventListener('click', () => window.api.send('rest-action', 'media-prev'));
-    el('btn-media-playpause').addEventListener('click', () => window.api.send('rest-action', 'media-playpause'));
+    el('btn-media-play').addEventListener('click', () => window.api.send('rest-action', 'media-play'));
+    el('btn-media-pause').addEventListener('click', () => window.api.send('rest-action', 'media-pause'));
     el('btn-media-next').addEventListener('click', () => window.api.send('rest-action', 'media-next'));
+
+    // Now playing (from the SMTC helper in lib/music.js), so a press visibly worked.
+    const nowPlaying = el('now-playing');
+    window.api.on('rest-media', (info) => {
+        if (!info || info.status === 'none' || !info.title) {
+            nowPlaying.classList.add('hidden');
+            return;
+        }
+        const icon = info.status === 'Playing' ? '🎵 正在播放' : '⏸ 已暫停';
+        nowPlaying.textContent = `${icon}：${info.title}${info.artist ? ' – ' + info.artist : ''}`;
+        nowPlaying.classList.remove('hidden');
+    });
 
     setupBackground();
 })();

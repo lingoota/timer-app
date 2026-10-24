@@ -38,6 +38,8 @@ let watchdogIdentity = null; // identity the watchdog task was last synced for
 // Rest / round / untimed / class logic lives in lib/usage-guard.js (persisted to disk).
 const restWindows = new RestWindows(__dirname);
 const displayProbe = new DisplayProbe(); // "a video is visibly playing" signal for untimed detection
+// Music controls on the rest overlay; the helper only runs while the overlay is up.
+const mediaController = new music.MediaController((info) => restWindows.sendMedia(info));
 let guard = null;
 
 // === 主進程計時器（source of truth，不被 Chromium 節流） ===
@@ -752,6 +754,7 @@ app.on('before-quit', () => {
 // 清理全局快捷鍵
 app.on('will-quit', () => {
   displayProbe.stop();
+  mediaController.stop();
   globalShortcut.unregisterAll();
   console.log('全局快捷鍵已清理');
 });
@@ -1177,9 +1180,10 @@ function setupIpcHandlers() {
     else if (action === 'wrapup') guard.startWrapup();
     else if (action === 'screen-off') turnOffScreen();
     else if (action === 'music') guard.startMusicBreak();
-    else if (action === 'media-playpause') music.sendMediaKey('playpause');
-    else if (action === 'media-next') music.sendMediaKey('next');
-    else if (action === 'media-prev') music.sendMediaKey('prev');
+    else if (action === 'media-play') mediaController.send('play');
+    else if (action === 'media-pause') mediaController.send('pause');
+    else if (action === 'media-next') mediaController.send('next');
+    else if (action === 'media-prev') mediaController.send('prev');
   });
 
   // Rest overlay slideshow: list image files in the folder the kid picked.
@@ -1292,8 +1296,14 @@ function setupGuard() {
     emitRecord: (rec) => sendToMain('guard-record', rec),
     onRestChanged: (ms) => sendToMain('guard-rest-sync', ms),
     onRestEnded: () => sendToMain('guard-rest-ended'),
-    showRest: () => restWindows.show(),
-    hideRest: () => restWindows.hide(),
+    showRest: () => {
+      restWindows.show();
+      mediaController.start();
+    },
+    hideRest: () => {
+      restWindows.hide();
+      mediaController.stop();
+    },
     openMusicApp: () => { music.openMusicApp(); },
     showReminder: (payload) => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
