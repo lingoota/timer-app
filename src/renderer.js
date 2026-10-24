@@ -24,10 +24,6 @@ document.addEventListener('DOMContentLoaded', function() {
         timerReminderOverlay: document.getElementById('timer-reminder-overlay'),
         reminderStartTimerBtn: document.getElementById('reminder-start-timer'),
         reminderSnoozeBtn: document.getElementById('reminder-snooze'),
-        cooldownReminderOverlay: document.getElementById('cooldown-reminder-overlay'),
-        cooldownRemainingTime: document.getElementById('cooldown-remaining-time'),
-        cooldownScreenOffBtn: document.getElementById('cooldown-screen-off-btn'),
-        cooldownDismissBtn: document.getElementById('cooldown-dismiss-btn'),
         user1Total: document.getElementById('user1-total'),
         user2Total: document.getElementById('user2-total'),
         user1Sessions: document.getElementById('user1-sessions'),
@@ -92,10 +88,8 @@ document.addEventListener('DOMContentLoaded', function() {
         isDarkMode: false,
         alarmAudio: null, // 用於追蹤警報音效
         alarmTimeout: null, // 用於自動停止1分鐘警報
-        lastCompletionTime: null, // 上次計時完成的時間
         isParentMode: false,  // 新增：家長觀察模式
-        cooldownDuration: 5 * 60 * 1000, // 休息冷卻期（毫秒）；每次結束時依「實際用掉的時間」動態設定（1:1）
-        cooldownUpdateInterval: null, // 冷卻期更新定時器
+        guard: null, // main 進程 usage guard 的最新快照（休息／本輪額度／線上課），guard-client.js 更新
         alarmCycleTimeout: null, // 警報循環定時器
         alarmCycleActive: false, // 警報循環是否激活
         alarmCycleCount: 0, // 警報循環次數計數
@@ -230,43 +224,67 @@ document.addEventListener('DOMContentLoaded', function() {
             showToast('時間不能超過30分鐘');
             return false;
         }
-        
+
+        // 本輪剩餘額度（扣掉未計時使用）
+        const guard = state.guard && state.guard.active ? state.guard : null;
+        if (guard) {
+            const allowanceMin = Math.floor((guard.allowanceSec + 30) / 60);
+            if (minutes > allowanceMin) {
+                showToast(`這一輪只剩 ${allowanceMin} 分鐘可以用`);
+                return false;
+            }
+        }
+
         return true;
     }
     
     // 檢查開始按鈕狀態
+    // 休息／線上課／收尾／本輪剩餘額度都由 main 進程的 usage guard 決定（state.guard 快照），
+    // renderer 不再自己記休息時間，重新載入也清不掉。
     function checkStartButtonState() {
         // 檢查基本條件
         const basicConditionsMet = state.selectedUser && state.selectedCategory && state.totalDuration > 0 && !state.isRunning;
-        
-        // 檢查冷卻期
-        let cooldownMet = true;
-        let remainingCooldown = 0;
-        
-        if (state.lastCompletionTime) {
-            const timeSinceCompletion = Date.now() - state.lastCompletionTime;
-            cooldownMet = timeSinceCompletion >= state.cooldownDuration;
-            remainingCooldown = Math.max(0, state.cooldownDuration - timeSinceCompletion);
+        const guard = state.guard && state.guard.active ? state.guard : null;
+        updateTimeButtonsForAllowance(guard);
+
+        let blockedText = null;
+        if (guard && !state.isPaused) {
+            if (guard.mode === 'rest') {
+                const totalSec = guard.restRemainingSec;
+                const min = Math.floor(totalSec / 60);
+                const sec = totalSec % 60;
+                blockedText = min > 0 ? `休息中 ${min}分${sec}秒` : `休息中 ${sec}秒`;
+            } else if (guard.mode === 'class') {
+                blockedText = '線上課中';
+            } else if (guard.mode === 'wrapup') {
+                blockedText = '收尾中';
+            } else if (state.totalDuration > guard.allowanceSec + 30) {
+                blockedText = `本輪只剩 ${Math.floor(guard.allowanceSec / 60)} 分`;
+            }
         }
-        
-        if (basicConditionsMet && cooldownMet) {
+
+        if (basicConditionsMet && !blockedText) {
             dom.startBtn.disabled = false;
             dom.startBtn.classList.add('active');
             dom.startBtn.textContent = '開始';
         } else {
             dom.startBtn.disabled = true;
             dom.startBtn.classList.remove('active');
-            
-            // 如果是冷卻期限制，顯示剩餘休息時間（精準到秒）
-            if (basicConditionsMet && !cooldownMet) {
-                const totalSec = Math.ceil(remainingCooldown / 1000);
-                const min = Math.floor(totalSec / 60);
-                const sec = totalSec % 60;
-                dom.startBtn.textContent = min > 0 ? `休息中 ${min}分${sec}秒` : `休息中 ${sec}秒`;
-            } else {
-                dom.startBtn.textContent = '開始';
-            }
+            dom.startBtn.textContent = (basicConditionsMet && blockedText) ? blockedText : '開始';
         }
+    }
+    window.appCheckStartButtonState = checkStartButtonState;
+
+    // 一輪最多 30 分：已用掉的（含未計時使用）扣掉後，超過剩餘額度的時間選項變灰
+    function updateTimeButtonsForAllowance(guard) {
+        const allowanceMin = guard ? Math.floor((guard.allowanceSec + 30) / 60) : 30;
+        dom.timeButtons.forEach(btn => {
+            const m = parseInt(btn.dataset.minutes);
+            if (isNaN(m)) return; // 「其他」：由輸入驗證把關
+            btn.disabled = !state.isRunning && m > allowanceMin;
+            btn.classList.toggle('over-allowance', m > allowanceMin);
+        });
+        if (dom.customMinutesInput) dom.customMinutesInput.max = String(Math.max(1, Math.min(30, allowanceMin)));
     }
     
     // 齒輪設定面板展開/收折
@@ -534,11 +552,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // 重置按鈕
     dom.resetBtn.addEventListener('click', function() {
-        // 只有「進行中或暫停中」的真實使用才按用掉時間休息。
-        // 自然完成（已由 timer-completed 啟動休息）或還沒開始就按重置 → 不觸發休息，
-        // 避免「按重置就被要求休息整個選定時間」的問題。
-        const wasLiveSession = state.isRunning || state.isPaused;
-        const usedSeconds = wasLiveSession ? Math.max(0, state.totalDuration - state.timeLeft) : 0;
+        // 休息與記錄由 main 進程處理：只有進行中／暫停中的重置才算用掉時間（resetMainTimer 判斷）
         stopAlarmSound(); // 停止警報
         state.isRunning = false;
         state.isPaused = false;
@@ -574,9 +588,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (window.updateLiveTimerStatus) {
             window.updateLiveTimerStatus(userId, { isRunning: false });
         }
-
-        // 依實際用掉的時間啟動休息冷卻期（若上面 stopAlarmSound 已啟動則會被擋掉）
-        beginCooldown(usedSeconds);
     });
 
     // 停止警報按鈕
@@ -624,37 +635,11 @@ document.addEventListener('DOMContentLoaded', function() {
         // 恢復使用者名稱大小
         dom.userDisplay.classList.remove('timing');
 
-        const endTimestamp = new Date();
         const completedUser = snapshot.user;
-        const completedCategory = snapshot.category;
-        const completedDuration = snapshot.totalDuration;
-        const startTimestamp = snapshot.startTimestamp ? new Date(snapshot.startTimestamp) : new Date();
 
-        // 計時到了 → 立刻開始算休息（不等使用者按掉警報）
-        // 小孩看到時間到就離開電腦休息，回來按結束時不該才開始倒數休息
-        beginCooldown(completedDuration);
-
-        if (completedUser === 'user1') {
-            state.user1TotalTime += completedDuration;
-            state.user1SessionCount++;
-            if (!state.user1CategoryTime[completedCategory]) {
-                state.user1CategoryTime[completedCategory] = 0;
-            }
-            state.user1CategoryTime[completedCategory] += completedDuration;
-        } else if (completedUser === 'user2') {
-            state.user2TotalTime += completedDuration;
-            state.user2SessionCount++;
-            if (!state.user2CategoryTime[completedCategory]) {
-                state.user2CategoryTime[completedCategory] = 0;
-            }
-            state.user2CategoryTime[completedCategory] += completedDuration;
-        }
-
-        updateStatsDisplay();
-        saveLocalBackup();
-
-        const currentSessionCount = completedUser === 'user1' ? state.user1SessionCount : state.user2SessionCount;
-        saveRecordToSheets(completedUser === 'user1' ? '品瑜' : '品榕', completedCategory, completedDuration, startTimestamp, endTimestamp, currentSessionCount);
+        // 休息、記錄（含開始／結束時間）都由 main 進程的 usage guard 處理：
+        // 它會發 guard-record 給 guard-client.js 寫進 Firebase，寫完再重新載入統計。
+        // 時間到的提醒改由全螢幕休息畫面負責，不再跑 20 分鐘的循環警報。
 
         checkAchievements();
 
@@ -674,13 +659,6 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         playCompletionEffect();
-
-        if (state.soundEnabled) {
-            state.alarmCycleActive = true;
-            state.alarmCycleCount = 0;
-            state.alarmCycleStartTime = Date.now(); // 記錄起始時間，供警報上限判斷
-            playSound('complete');
-        }
 
         showToast('時間到! 🎉');
 
@@ -735,11 +713,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 
-    // 從迷你視窗結束 → 同步主視窗 UI（main 已重置 timer + 恢復視窗）
-    window.api.on('timer-stopped-by-mini', () => {
-        // 只有「進行中或暫停中」才按用掉時間休息（同重置邏輯，避免完成後誤觸發）
-        const wasLiveSession = state.isRunning || state.isPaused;
-        const usedSeconds = wasLiveSession ? Math.max(0, state.totalDuration - state.timeLeft) : 0;
+    // 從迷你視窗結束 → 同步主視窗 UI（main 已重置 timer + 恢復視窗 + 記錄與休息）
+    window.api.on('timer-stopped-by-mini', () => syncStoppedUi('計時已結束'));
+
+    // main 的 usage guard 強制結束計時（切換線上課／本輪已滿 30 分）
+    window.api.on('timer-stopped-by-guard', (reason) => {
+        syncStoppedUi(reason === 'switch-class' ? '已結束計時，切換到線上課' : '這一輪已滿 30 分鐘，計時結束');
+    });
+
+    // main 拒絕開始（休息中／超過本輪額度）：把剛切成「計時中」的 UI 還原
+    window.api.on('timer-start-refused', (reason) => {
+        const msg = { rest: '還在休息時間，不能開始計時', allowance: '超過這一輪剩下的時間', class: '線上課中', wrapup: '收尾中' };
+        syncStoppedUi(msg[reason] || '現在不能開始計時', { silent: true });
+    });
+
+    function syncStoppedUi(toastText, opts = {}) {
+        // main 已經關掉計時用的迷你視窗（線上課會另開自己的倒數）
+        state.isMiniMode = false;
         state.isRunning = false;
         state.isPaused = false;
         state.timeLeft = state.totalDuration;
@@ -753,17 +743,15 @@ document.addEventListener('DOMContentLoaded', function() {
         dom.userDisplay.classList.remove('timing');
         dom.sandAnimation.style.display = 'none';
         dom.completedAnimation.style.display = 'none';
-        if (state.soundEnabled) playSound('reset');
-        showToast('計時已結束');
+        if (state.soundEnabled && !opts.silent) playSound('reset');
+        showToast(toastText);
 
         const userId = state.selectedUser === 'user1' ? 'pinyu' : 'pinrong';
         if (window.updateLiveTimerStatus) {
             window.updateLiveTimerStatus(userId, { isRunning: false });
         }
-
-        // 依實際用掉的時間啟動休息冷卻期
-        beginCooldown(usedSeconds);
-    });
+        checkStartButtonState();
+    }
 
     // 更新顯示（主視窗顯示用，迷你視窗的時間由 main 進程直接廣播）
     function updateDisplay() {
@@ -1160,9 +1148,10 @@ document.addEventListener('DOMContentLoaded', function() {
             state.user2TotalTime = todayStats.pinrong.totalTime;
             state.user2CategoryTime = todayStats.pinrong.activities;
 
-            // 從今天的活動記錄計算當天計時次數（records 陣列的長度）
-            state.user1SessionCount = todayStats.pinyu.records.length;
-            state.user2SessionCount = todayStats.pinrong.records.length;
+            // 當天計時次數：只算正式計時（未計時、收尾、線上課、事件記錄不算一次）
+            const isTimed = window.isTimedRecord || (() => true);
+            state.user1SessionCount = todayStats.pinyu.records.filter(isTimed).length;
+            state.user2SessionCount = todayStats.pinrong.records.filter(isTimed).length;
 
             console.log('Firebase 同步完成:', {
                 user1: { time: state.user1TotalTime, sessions: state.user1SessionCount },
@@ -1181,40 +1170,9 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
-    // 保存記錄到 Firebase (新版)
-    async function saveRecordToSheets(user, category, duration, startTime, endTime, sessionCount) {
-        updateSyncStatus('正在同步...', true);
+    // 記錄寫入改由 guard-client.js 處理（main 進程 usage guard 產生記錄 → 寫 Firebase → 回 ack）
+    window.appReloadStats = () => loadDataFromSheets();
 
-        try {
-            // 轉換使用者名稱為 userId
-            const userId = user === '品瑜' ? 'pinyu' : 'pinrong';
-
-            console.log(`準備儲存到 Firebase: ${user} (${userId}), ${category}, ${duration}分鐘`);
-
-            // 記錄活動到 Firebase
-            const success = await recordActivity(userId, duration, category);
-
-            if (success) {
-                updateSyncStatus('已同步 ☁️');
-                showToast('使用記錄已存到 Firebase');
-                console.log('✅ Firebase 儲存成功');
-
-                // 重新載入數據以更新顯示
-                setTimeout(() => {
-                    loadDataFromSheets();
-                }, 500);
-            } else {
-                updateSyncStatus('同步失敗');
-                showToast('無法存檔到 Firebase，已保存本地備份');
-                console.error('❌ Firebase 儲存失敗');
-            }
-        } catch (error) {
-            updateSyncStatus('同步錯誤');
-            showToast('無法存檔到 Firebase，已保存本地備份');
-            console.error('Error in saveRecordToFirebase:', error);
-        }
-    }
-    
     // 更新同步狀態
     function updateSyncStatus(status, isLoading = false) {
         if (isLoading) {
@@ -1816,6 +1774,12 @@ document.addEventListener('DOMContentLoaded', function() {
         // 用戶設定按鈕（切換使用者）
         if (dom.userSettingsBtn) {
             dom.userSettingsBtn.addEventListener('click', () => {
+                // 休息／線上課／收尾／計時中不能換身份（換成家長模式會停用所有防堵）
+                const guard = state.guard && state.guard.active ? state.guard : null;
+                if (guard && guard.mode !== 'idle' && guard.mode !== 'untimed') {
+                    showToast('現在不能切換身份（休息、上課或計時中）');
+                    return;
+                }
                 console.log('👤 用戶設定按鈕被點擊，重新顯示身份選擇');
                 clearInstalledUser();
             });
@@ -1870,22 +1834,45 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 綁定提醒對話框事件
     function setupReminderEvents() {
-        // 監聽主進程的提醒事件
-        window.api.on('show-timer-reminder', () => {
-            console.log('⏰ 收到計時提醒');
+        // 監聽主進程的提醒事件（payload：snoozesLeft / untimedSince / allowanceMin）
+        window.api.on('show-timer-reminder', (payload) => {
+            console.log('⏰ 收到計時提醒', payload);
+            const info = payload || { snoozesLeft: 0 };
+            if (dom.reminderSnoozeBtn) {
+                // 每一輪最多 2 次，用完只剩「開始計時」
+                dom.reminderSnoozeBtn.style.display = info.snoozesLeft > 0 ? '' : 'none';
+                dom.reminderSnoozeBtn.textContent = `💤 稍後提醒（5分鐘後，剩 ${info.snoozesLeft} 次）`;
+            }
+            const subtitle = document.getElementById('reminder-subtitle');
+            if (subtitle) {
+                subtitle.textContent = info.untimedSince
+                    ? `從 ${info.untimedSince} 開始用電腦，還沒開始計時喔！這段時間會記成「未計時使用」並算進今天的時間。`
+                    : '你已經使用電腦超過 1 分鐘了，還沒開始計時喔！';
+            }
+            const allowance = document.getElementById('reminder-allowance');
+            if (allowance) {
+                allowance.textContent = typeof info.allowanceMin === 'number'
+                    ? `這一輪還可以計時 ${info.allowanceMin} 分鐘` : '';
+            }
             if (dom.timerReminderOverlay) {
                 dom.timerReminderOverlay.classList.remove('hidden');
             }
         });
 
-        // 「開始計時」按鈕
+        // main 關閉提醒（已開始計時、進入線上課、未計時結案）
+        window.api.on('hide-timer-reminder', () => {
+            if (dom.timerReminderOverlay) {
+                dom.timerReminderOverlay.classList.add('hidden');
+            }
+        });
+
+        // 「開始計時」按鈕：只關掉提醒讓孩子去選時間；30 秒內沒開始會再跳出來
         if (dom.reminderStartTimerBtn) {
             dom.reminderStartTimerBtn.addEventListener('click', () => {
                 if (dom.timerReminderOverlay) {
                     dom.timerReminderOverlay.classList.add('hidden');
                 }
-                // 取消視窗置頂
-                window.api.send('cancel-always-on-top');
+                window.api.send('guard-reminder-hidden');
             });
         }
 
@@ -1900,102 +1887,18 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         }
 
-        // 冷卻期提醒：關閉螢幕按鈕
-        if (dom.cooldownScreenOffBtn) {
-            dom.cooldownScreenOffBtn.addEventListener('click', () => {
-                window.api.send('turn-off-screen');
-                window.api.send('cooldown-dismiss');
-                if (dom.cooldownReminderOverlay) {
-                    dom.cooldownReminderOverlay.classList.add('hidden');
+        // 「線上課」按鈕（提醒視窗內）
+        const reminderClassBtn = document.getElementById('reminder-class');
+        if (reminderClassBtn) {
+            reminderClassBtn.addEventListener('click', () => {
+                if (dom.timerReminderOverlay) {
+                    dom.timerReminderOverlay.classList.add('hidden');
                 }
-                showToast('螢幕已關閉，動滑鼠或按鍵盤即可恢復');
-            });
-        }
-
-        // 冷卻期提醒：我知道了按鈕
-        if (dom.cooldownDismissBtn) {
-            dom.cooldownDismissBtn.addEventListener('click', () => {
-                window.api.send('cooldown-dismiss');
-                if (dom.cooldownReminderOverlay) {
-                    dom.cooldownReminderOverlay.classList.add('hidden');
-                }
+                window.api.send('guard-start-class');
             });
         }
     }
 
-    // 冷卻期提醒 IPC 監聽
-    window.api.on('show-cooldown-reminder', (remainingSec) => {
-        if (dom.cooldownReminderOverlay) {
-            const min = Math.floor(remainingSec / 60);
-            const sec = remainingSec % 60;
-            dom.cooldownRemainingTime.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
-            dom.cooldownReminderOverlay.classList.remove('hidden');
-        }
-    });
-
-    window.api.on('update-cooldown-time', (remainingSec) => {
-        if (dom.cooldownRemainingTime) {
-            const min = Math.floor(remainingSec / 60);
-            const sec = remainingSec % 60;
-            dom.cooldownRemainingTime.textContent = `${min}:${sec.toString().padStart(2, '0')}`;
-        }
-    });
-
-    window.api.on('cooldown-ended', () => {
-        if (dom.cooldownReminderOverlay) {
-            dom.cooldownReminderOverlay.classList.add('hidden');
-        }
-        showToast('休息時間結束，可以重新計時了！');
-    });
-
-    // 依「實際用掉的時間」啟動休息冷卻期（1:1：用多久休多久，不設上下限）
-    // usedSeconds：這一輪實際用掉的秒數（= totalDuration − 結束時的剩餘秒數，暫停時間不計）
-    function beginCooldown(usedSeconds) {
-        // 沒實際用到時間就不休息（例如還沒開始計時就按重置）
-        if (!usedSeconds || usedSeconds <= 0) return;
-        // 防止同一次結束重複觸發（例如重置時警報剛好在響，stopAlarmSound 與重置各算一次）
-        if (state.cooldownUpdateInterval) return;
-
-        state.cooldownDuration = usedSeconds * 1000; // 1:1，秒 → 毫秒
-        state.lastCompletionTime = Date.now();
-        console.log(`開始休息冷卻期：用了 ${usedSeconds} 秒 → 休息 ${usedSeconds} 秒`);
-
-        // 啟動冷卻期更新定時器
-        startCooldownUpdate();
-        // 立即更新開始按鈕為休息中狀態
-        checkStartButtonState();
-        // 通知主程序開始冷卻期活動偵測，帶上動態休息時長（毫秒）
-        window.api.send('cooldown-started', state.cooldownDuration);
-    }
-
-    // 啟動冷卻期更新定時器
-    function startCooldownUpdate() {
-        // 清除可能存在的舊定時器
-        if (state.cooldownUpdateInterval) {
-            clearInterval(state.cooldownUpdateInterval);
-        }
-        
-        // 每秒更新一次按鈕狀態
-        state.cooldownUpdateInterval = setInterval(() => {
-            if (state.lastCompletionTime) {
-                const timeSinceCompletion = Date.now() - state.lastCompletionTime;
-                
-                if (timeSinceCompletion >= state.cooldownDuration) {
-                    // 冷卻期結束，清除定時器
-                    clearInterval(state.cooldownUpdateInterval);
-                    state.cooldownUpdateInterval = null;
-                    console.log('冷卻期結束');
-                    showToast('可以重新開始計時了！');
-                }
-                
-                // 更新按鈕狀態
-                checkStartButtonState();
-            }
-        }, 1000);
-        
-        console.log('冷卻期更新定時器已啟動');
-    }
-    
     // 暴露給全局使用（調試用）
-    window.clearRememberedUser = clearRememberedUser;
+    window.clearInstalledUser = clearInstalledUser;
 });

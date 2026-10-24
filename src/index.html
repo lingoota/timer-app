@@ -39,7 +39,9 @@
         <div class="user-selection-modal reminder-modal">
             <div class="reminder-icon">⏰</div>
             <h2 class="modal-title">還沒開始計時喔！</h2>
-            <p class="modal-subtitle">你已經使用電腦超過 1 分鐘了，還沒開始計時喔！</p>
+            <p id="reminder-subtitle" class="modal-subtitle">你已經使用電腦超過 1 分鐘了，還沒開始計時喔！</p>
+            <p id="reminder-allowance" class="modal-subtitle reminder-allowance"></p>
+            <p class="modal-subtitle reminder-hint">🎧 只是在聽音樂？把影片分頁切走或把視窗縮小，就不會算時間喔</p>
 
             <div class="reminder-buttons">
                 <button id="reminder-start-timer" class="reminder-start-btn">
@@ -48,24 +50,89 @@
                 <button id="reminder-snooze" class="reminder-snooze-btn">
                     💤 稍後提醒（5分鐘後）
                 </button>
+                <button id="reminder-class" class="reminder-snooze-btn">
+                    📘 我要上線上課
+                </button>
             </div>
         </div>
     </div>
 
-    <!-- 冷卻期休息提醒對話框 -->
-    <div id="cooldown-reminder-overlay" class="user-selection-overlay hidden">
-        <div class="user-selection-modal reminder-modal">
-            <div class="reminder-icon">😴</div>
-            <h2 class="modal-title">休息時間還沒結束喔！</h2>
-            <p class="modal-subtitle">讓眼睛休息一下，剩餘時間：</p>
-            <div id="cooldown-remaining-time" class="cooldown-remaining-time">5:00</div>
-            <div class="reminder-buttons">
-                <button id="cooldown-screen-off-btn" class="reminder-start-btn">
-                    🖥️ 關閉螢幕休息
-                </button>
-                <button id="cooldown-dismiss-btn" class="reminder-snooze-btn">
-                    👌 我知道了
-                </button>
+    <!-- 小計時器外觀 -->
+    <div id="mini-style-modal" class="modal hidden">
+        <div class="modal-content rest-settings-content">
+            <div class="modal-header">
+                <h2>小計時器外觀</h2>
+                <button id="mini-style-close" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- 預覽：跟真的小計時器同尺寸 -->
+                <div id="mini-preview" class="mini-preview">
+                    <div id="mini-preview-image" class="mini-preview-image"></div>
+                    <span class="mini-preview-name">品瑜</span>
+                    <span class="mini-preview-time">12:34</span>
+                    <span class="mini-preview-btns">⏸ ⏹</span>
+                </div>
+                <div class="rest-settings-row">
+                    <label>文字顏色 <input type="color" id="mini-text-color" value="#ffffff"></label>
+                    <div id="mini-text-swatches" class="color-swatches"></div>
+                </div>
+                <div class="rest-settings-row">
+                    <label><input type="checkbox" id="mini-bg-custom"> 自訂底色</label>
+                    <input type="color" id="mini-bg-color" value="#4158d0">
+                    <div id="mini-bg-swatches" class="color-swatches"></div>
+                </div>
+                <div class="rest-settings-row">
+                    <label>底色透明度 <input type="range" id="mini-bg-alpha" min="20" max="100" step="5" value="100"></label>
+                    <span id="mini-bg-alpha-value" class="rest-settings-hint">100%</span>
+                </div>
+                <div class="rest-settings-row">
+                    <button id="mini-pick-image" class="export-option-btn">🖼️ 選擇底圖</button>
+                    <button id="mini-clear-image" class="export-option-btn">✖ 移除底圖</button>
+                    <input type="file" id="mini-image-input" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" style="display: none;">
+                </div>
+                <div class="rest-settings-row">
+                    <label>底圖透明度 <input type="range" id="mini-image-opacity" min="10" max="100" step="5" value="60"></label>
+                    <span id="mini-image-opacity-value" class="rest-settings-hint">60%</span>
+                </div>
+                <div class="rest-settings-row">
+                    <button id="mini-style-reset" class="export-option-btn">↺ 恢復預設</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 休息畫面設定 -->
+    <div id="rest-settings-modal" class="modal hidden">
+        <div class="modal-content rest-settings-content">
+            <div class="modal-header">
+                <h2>休息畫面</h2>
+                <button id="rest-settings-close" class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="rest-settings-row">
+                    <label><input type="radio" name="rest-mode" value="background" checked> 用目前的背景圖</label>
+                    <label><input type="radio" name="rest-mode" value="image"> 單張圖片</label>
+                    <label><input type="radio" name="rest-mode" value="folder"> 資料夾輪播（像螢幕保護程式）</label>
+                </div>
+                <div class="rest-settings-row">
+                    <button id="rest-pick-image" class="export-option-btn">🖼️ 選擇圖片</button>
+                    <span id="rest-image-status" class="rest-settings-hint">尚未選擇</span>
+                    <input type="file" id="rest-image-input" accept="image/png,image/jpeg,image/jpg,image/webp,image/gif" style="display: none;">
+                </div>
+                <div class="rest-settings-row">
+                    <button id="rest-pick-folder" class="export-option-btn">📁 選擇資料夾</button>
+                    <span id="rest-folder-status" class="rest-settings-hint">尚未選擇</span>
+                </div>
+                <div class="rest-settings-row">
+                    <label>輪播間隔
+                        <select id="rest-interval">
+                            <option value="10">10 秒</option>
+                            <option value="30" selected>30 秒</option>
+                            <option value="60">1 分鐘</option>
+                            <option value="300">5 分鐘</option>
+                        </select>
+                    </label>
+                </div>
             </div>
         </div>
     </div>
@@ -106,6 +173,14 @@
                     <button id="user-settings" class="feature-btn" title="切換用戶">
                         👤
                         <span class="feature-label">用戶</span>
+                    </button>
+                    <button id="rest-settings-btn" class="feature-btn" title="休息畫面">
+                        😴
+                        <span class="feature-label">休息畫面</span>
+                    </button>
+                    <button id="mini-style-btn" class="feature-btn" title="小計時器外觀">
+                        🎨
+                        <span class="feature-label">小計時器</span>
                     </button>
                 </div>
                 <!-- 背景透明度滑桿（移入面板內） -->
@@ -226,6 +301,12 @@
             <button id="reset-btn" class="control-btn" disabled>重置</button>
         </div>
 
+        <!-- 線上課（特殊模式：隨時可按，計時中按會先結束目前這筆） -->
+        <div class="class-mode-wrapper">
+            <button id="class-mode-btn" class="class-mode-btn">📘 線上課</button>
+            <div id="guard-status-line" class="guard-status-line"></div>
+        </div>
+
         <!-- 家長模式：即時計時狀態 -->
         <div id="parent-live-status" class="parent-live-status" style="display: none;">
             <div class="live-status-title">📊 即時計時狀態</div>
@@ -257,6 +338,21 @@
             </div>
         </div>
         
+        <!-- 今日明細 -->
+        <div class="daily-log-container">
+            <div class="daily-log-header">
+                <span class="stats-title">今日明細</span>
+                <div id="daily-log-tabs" class="daily-log-tabs" style="display: none;">
+                    <button class="daily-log-tab active" data-user="pinyu">品瑜</button>
+                    <button class="daily-log-tab" data-user="pinrong">品榕</button>
+                </div>
+            </div>
+            <div id="daily-log-summary" class="daily-log-summary"></div>
+            <div id="daily-log-list" class="daily-log-list">
+                <div class="daily-log-empty">今天還沒有記錄</div>
+            </div>
+        </div>
+
         <div id="sync-status" class="sync-status">準備就緒</div>
     </div>
     
@@ -445,5 +541,18 @@
 
     <!-- 背景圖片功能 -->
     <script src="background.js"></script>
+
+    <!-- 防堵機制：usage guard 狀態同步、記錄寫入、線上課按鈕 -->
+    <script src="guard-client.js"></script>
+
+    <!-- 今日明細 -->
+    <script src="daily-log.js"></script>
+
+    <!-- 休息畫面設定 -->
+    <script src="rest-settings.js"></script>
+
+    <!-- 小計時器外觀設定 -->
+    <script src="mini-appearance.js"></script>
+    <script src="mini-style-settings.js"></script>
 </body>
 </html>

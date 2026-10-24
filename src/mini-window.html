@@ -18,10 +18,30 @@
       align-items: center;
       padding: 0 8px 0 12px;
       gap: 6px;
+      position: relative;
+      --mini-text: #ffffff;
+    }
+
+    /* 自訂底圖（🎨 小計時器外觀），透明度可調，疊在底色上 */
+    .mini-image-layer {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background-size: cover;
+      background-position: center;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body > *:not(.mini-image-layer) {
+      position: relative;
+      z-index: 1;
     }
 
     .user-name {
-      color: rgba(255, 255, 255, 0.85);
+      color: var(--mini-text);
+      opacity: 0.85;
       font-size: 12px;
       font-weight: 600;
       min-width: 28px;
@@ -29,7 +49,7 @@
     }
 
     .time-display {
-      color: white;
+      color: var(--mini-text);
       font-size: 26px;
       font-weight: 700;
       font-family: 'Courier New', monospace;
@@ -93,7 +113,8 @@
     }
   </style>
 </head>
-<body>
+<body title="全螢幕時按 F10 顯示／隱藏小計時器">
+  <div class="mini-image-layer" id="mini-image-layer"></div>
   <span class="user-name" id="user-name">品瑜</span>
   <span class="time-display" id="time-display">25:00</span>
   <div class="controls">
@@ -105,7 +126,15 @@
     <button class="btn-sm btn-close" id="close-btn" title="隱藏到系統匣">✕</button>
   </div>
 
+  <script src="mini-appearance.js"></script>
   <script>
+    // 套用孩子自訂的顏色／底圖；設定畫面改動時 main 會轉發 mini-appearance-changed
+    function applyAppearance() {
+      window.miniAppearance.apply(document.body, document.getElementById('mini-image-layer'), window.miniAppearance.load());
+    }
+    applyAppearance();
+    window.api.on('mini-appearance-changed', applyAppearance);
+
     const timeDisplay = document.getElementById('time-display');
     const userNameEl = document.getElementById('user-name');
     const pauseBtn = document.getElementById('pause-btn');
@@ -116,9 +145,12 @@
     let isPaused = false;
 
     // 接收主進程傳來的計時更新
-    window.api.on('update-mini-display', (timeString, userName) => {
+    // guardMode = true：線上課／收尾倒數，不能暫停，結束鈕改為提早結束
+    window.api.on('update-mini-display', (timeString, userName, guardMode) => {
       timeDisplay.textContent = timeString;
       userNameEl.textContent = userName;
+      pauseBtn.style.display = guardMode ? 'none' : '';
+      stopBtn.title = guardMode ? '提早結束' : '結束計時';
     });
 
     // 接收暫停狀態同步

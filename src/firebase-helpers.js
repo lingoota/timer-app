@@ -170,6 +170,72 @@ async function recordActivity(userId, duration, activityType) {
 }
 
 /**
+ * Write one record produced by the main-process usage guard.
+ * Idempotent by record.id because the guard re-sends unacknowledged records.
+ * Only `counted` records add to totals; class / event records are listed but not summed.
+ */
+async function writeGuardRecord(record) {
+    const { db, functions } = await waitForFirebase();
+    const { doc, getDoc, setDoc, updateDoc, serverTimestamp, increment, arrayUnion } = functions;
+
+    const userId = record.userId;
+    const counted = record.counted !== false;
+    const amount = counted ? record.duration : 0;
+    const activityRef = doc(db, 'users', userId, 'activities', record.dateKey);
+    const activityDoc = await getDoc(activityRef);
+
+    if (activityDoc.exists()) {
+        const records = activityDoc.data().records || [];
+        if (records.some(r => r.id === record.id)) return true; // already written
+    }
+    // merge + arrayUnion + increment: atomic append, also creates the day's doc if missing
+    await setDoc(activityRef, {
+        date: record.dateKey,
+        records: arrayUnion(record),
+        totalTime: increment(amount),
+        lastUpdate: serverTimestamp()
+    }, { merge: true });
+
+    if (counted) {
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
+        if (!userDoc.exists()) await initializeUser(userId);
+        await updateDoc(userRef, {
+            totalUsage: increment(amount),
+            todayUsage: increment(amount),
+            timerCount: increment(record.kind === 'timed' ? 1 : 0),
+            lastUpdate: serverTimestamp()
+        });
+    }
+    return true;
+}
+
+/**
+ * Rest end time mirrored to Firebase so deleting the local guard file does not end a rest.
+ */
+async function setRestEndAt(userId, restEndAt) {
+    try {
+        const { db, functions } = await waitForFirebase();
+        const { doc, setDoc, serverTimestamp } = functions;
+        await setDoc(doc(db, 'users', userId), { restEndAt, lastUpdate: serverTimestamp() }, { merge: true });
+    } catch (error) {
+        console.error(`❌ Firebase: 同步休息時間失敗 (${userId}):`, error);
+    }
+}
+
+async function getRestEndAt(userId) {
+    try {
+        const { db, functions } = await waitForFirebase();
+        const { doc, getDoc } = functions;
+        const userDoc = await getDoc(doc(db, 'users', userId));
+        return userDoc.exists() ? (userDoc.data().restEndAt || 0) : 0;
+    } catch (error) {
+        console.error(`❌ Firebase: 讀取休息時間失敗 (${userId}):`, error);
+        return 0;
+    }
+}
+
+/**
  * 取得今天的活動記錄
  */
 async function getTodayActivities(userId) {
@@ -191,6 +257,16 @@ async function getTodayActivities(userId) {
         console.error(`❌ Firebase: 取得今天活動失敗 (${userId}):`, error);
         return [];
     }
+}
+
+// Legacy records (before beta.23) have no `counted` field and always counted.
+function isCountedRecord(record) {
+    return record.counted !== false;
+}
+
+// A "session" for the 次數 display: timed sessions only (legacy records were all timed).
+function isTimedRecord(record) {
+    return !record.kind || record.kind === 'timed';
 }
 
 /**
@@ -215,8 +291,8 @@ async function getTodayStats() {
             stats.pinyu.totalTime = data.totalTime || 0;
             stats.pinyu.records = data.records || [];
 
-            // 統計各活動類型的時間
-            (data.records || []).forEach(record => {
+            // 統計各活動類型的時間（線上課、事件記錄不算）
+            (data.records || []).filter(isCountedRecord).forEach(record => {
                 const type = record.type;
                 stats.pinyu.activities[type] = (stats.pinyu.activities[type] || 0) + record.duration;
             });
@@ -230,8 +306,8 @@ async function getTodayStats() {
             stats.pinrong.totalTime = data.totalTime || 0;
             stats.pinrong.records = data.records || [];
 
-            // 統計各活動類型的時間
-            (data.records || []).forEach(record => {
+            // 統計各活動類型的時間（線上課、事件記錄不算）
+            (data.records || []).filter(isCountedRecord).forEach(record => {
                 const type = record.type;
                 stats.pinrong.activities[type] = (stats.pinrong.activities[type] || 0) + record.duration;
             });
@@ -372,3 +448,7 @@ window.getTodayStats = getTodayStats;
 window.getHistoryStats = getHistoryStats;
 window.updateLiveTimerStatus = updateLiveTimerStatus;
 window.getLiveTimerStatus = getLiveTimerStatus;
+window.writeGuardRecord = writeGuardRecord;
+window.setRestEndAt = setRestEndAt;
+window.getRestEndAt = getRestEndAt;
+window.isTimedRecord = isTimedRecord;

@@ -1,7 +1,12 @@
-const { app, BrowserWindow, Menu, screen, ipcMain, Tray, globalShortcut, powerMonitor, powerSaveBlocker } = require('electron');
+const { app, BrowserWindow, Menu, screen, ipcMain, Tray, globalShortcut, powerMonitor, powerSaveBlocker, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const { execFile } = require('child_process');
 const axios = require('axios');
+const { UsageGuard } = require('./lib/usage-guard');
+const { RestWindows } = require('./lib/rest-window');
+const watchdog = require('./lib/watchdog');
+const { DisplayProbe } = require('./lib/display-probe');
 
 // 禁用硬體加速以避免 WSL 環境的 GPU 錯誤
 // 只有在 app 可用時才呼叫
@@ -24,16 +29,15 @@ let isMinimized = false;
 let tray = null;
 let forceQuit = false;
 
-// 閒置偵測相關
-let currentUserIdentity = null; // 'user1' | 'user2' | 'parent'
-let isTimerCurrentlyRunning = false;
-let activeSeconds = 0;
-let reminderCooldownUntil = 0;
-let activityCheckInterval = null;
+// 用戶身份：'user1' | 'user2' | 'parent'
+let currentUserIdentity = null;
+let miniGuardMode = false; // mini window is showing online-class / wrap-up instead of the timer
+let watchdogIdentity = null; // identity the watchdog task was last synced for
 
-// 冷卻期活動偵測
-let cooldownEndTime = 0; // 冷卻期結束時間
-let cooldownReminderShowing = false; // 是否正在顯示冷卻期提醒
+// Rest / round / untimed / class logic lives in lib/usage-guard.js (persisted to disk).
+const restWindows = new RestWindows(__dirname);
+const displayProbe = new DisplayProbe(); // "a video is visibly playing" signal for untimed detection
+let guard = null;
 
 // === 主進程計時器（source of truth，不被 Chromium 節流） ===
 let timerState = {
@@ -67,8 +71,8 @@ function broadcastTick() {
       user: timerState.user,
     });
   }
-  if (miniWindow && !miniWindow.isDestroyed()) {
-    miniWindow.webContents.send('update-mini-display', timeString, userName);
+  if (miniWindow && !miniWindow.isDestroyed() && !miniGuardMode) {
+    miniWindow.webContents.send('update-mini-display', timeString, userName, false);
   }
 }
 
@@ -153,14 +157,19 @@ function resumeMainTimer() {
   timerState.isPaused = false;
   timerState.pauseStartTime = 0;
   broadcastTick();
+  if (guard) guard.onTimerResume();
   console.log('▶️ 主進程計時繼續，剩餘:', timerState.remainingSec, '秒');
 }
 
-function resetMainTimer() {
+// reason: 'reset' | 'mini-stop' | 'switch-class' | 'limit'
+function resetMainTimer(reason = 'reset') {
   if (timerTickInterval) {
     clearInterval(timerTickInterval);
     timerTickInterval = null;
   }
+  // Only a running or paused session counts as used time (resetting after completion does not).
+  const wasLive = timerState.isRunning;
+  const usedSec = Math.max(0, timerState.totalDuration - timerState.remainingSec);
   timerState.isRunning = false;
   timerState.isPaused = false;
   timerState.remainingSec = timerState.totalDuration;
@@ -168,7 +177,21 @@ function resetMainTimer() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('timer-reset-confirmed');
   }
+  if (wasLive && guard) guard.onTimerEnd({ completed: false, usedSec, reason });
   console.log('🔄 主進程計時重置');
+}
+
+// Guard-initiated stop (switching to online class, round limit): sync the main window UI too.
+function forceStopTimer(reason) {
+  if (!timerState.isRunning) return;
+  resetMainTimer(reason);
+  if (isMinimized && !miniGuardMode) {
+    closeMiniWindow();
+    isMinimized = false;
+  }
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('timer-stopped-by-guard', reason);
+  }
 }
 
 // 計時自然完成 → 主動恢復視窗 + 通知 renderer 跑後續流程
@@ -193,17 +216,16 @@ function completeTimer() {
     console.log('計時完成：從迷你模式恢復');
     restoreFromMiniMode();
   }
+  // The guard records the session and puts up the full-screen rest overlay,
+  // which now plays the time-up role the old 20-minute alarm loop used to.
+  if (guard) guard.onTimerEnd({ completed: true, usedSec: completedSnapshot.totalDuration, reason: 'completed' });
   if (mainWindow && !mainWindow.isDestroyed()) {
-    // screen-saver level：能蓋過其他應用的全螢幕模式（如 Chrome 全螢幕看 YouTube）
-    mainWindow.setAlwaysOnTop(true, 'screen-saver');
     mainWindow.show();
-    mainWindow.focus();
     // 工具列圖示閃爍：即使視窗仍被擋住，也能引起注意
     mainWindow.flashFrame(true);
 
     setTimeout(() => {
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.setAlwaysOnTop(false);
         mainWindow.flashFrame(false);
       }
     }, 5000);
@@ -334,6 +356,11 @@ function createWindow() {
     mainWindow = null;
   });
 
+  // Windows logoff / shutdown: a normal exit, not "the kid killed the timer".
+  mainWindow.on('session-end', () => {
+    if (guard) guard.markExit('system');
+  });
+
   // 攔截最小化事件
   mainWindow.on('minimize', (event) => {
     // 如果不在迷你模式，攔截並檢查計時狀態
@@ -388,6 +415,10 @@ function createTray() {
           createWindow();
         }
       }
+    },
+    {
+      label: '顯示 / 隱藏小計時器 (F10)',
+      click: () => toggleMiniOverlay()
     },
     {
       label: '退出',
@@ -477,7 +508,7 @@ function createMiniWindow(timeString, userName) {
   // 視窗載入完成後送初始資料
   miniWindow.webContents.once('did-finish-load', () => {
     if (miniWindow && !miniWindow.isDestroyed()) {
-      miniWindow.webContents.send('update-mini-display', timeString, userName);
+      miniWindow.webContents.send('update-mini-display', timeString, userName, miniGuardMode);
     }
   });
 
@@ -500,7 +531,11 @@ function createMiniWindow(timeString, userName) {
 
   miniWindow.on('closed', () => {
     miniWindow = null;
+    miniPinned = false;
+    unregisterMiniHotkey();
   });
+
+  registerMiniHotkey();
 
   // 如果沒有設定位置，放在螢幕右上角
   if (!miniOptions.x && miniOptions.x !== 0) {
@@ -517,6 +552,43 @@ function closeMiniWindow() {
     miniWindow.removeAllListeners('close'); // 移除隱藏攔截，允許真正關閉
     miniWindow.close();
     miniWindow = null;
+  }
+  miniPinned = false;
+  unregisterMiniHotkey();
+}
+
+// === F10: show / hide the mini timer over full-screen apps (same idea as the ZTM overlay) ===
+// The mini window normally sits behind a full-screen game or video, so the kid cannot see
+// whether the timer is running, nor show it to a parent. F10 pins it at 'screen-saver' level
+// without stealing focus; F10 again hides it (the timer keeps running in the background).
+// F10 is only held while a mini window exists: a global shortcut swallows the key, so holding
+// it all the time would break F10 in every other app. Exclusive-fullscreen games can still
+// draw over it; borderless / windowed full screen (browsers, most games) works.
+const MINI_HOTKEY = 'F10';
+let miniPinned = false;
+
+function registerMiniHotkey() {
+  if (globalShortcut.isRegistered(MINI_HOTKEY)) return;
+  if (!globalShortcut.register(MINI_HOTKEY, toggleMiniOverlay)) {
+    console.warn('F10 已被其他程式佔用，小計時器顯示熱鍵未註冊（可用系統匣選單切換）');
+  }
+}
+
+function unregisterMiniHotkey() {
+  if (globalShortcut.isRegistered(MINI_HOTKEY)) globalShortcut.unregister(MINI_HOTKEY);
+}
+
+function toggleMiniOverlay() {
+  if (!miniWindow || miniWindow.isDestroyed()) return;
+  if (miniPinned && miniWindow.isVisible()) {
+    miniPinned = false;
+    miniWindow.setAlwaysOnTop(false);
+    miniWindow.hide();
+  } else {
+    miniPinned = true;
+    miniWindow.setAlwaysOnTop(true, 'screen-saver');
+    miniWindow.showInactive(); // keep keyboard focus in the game / video
+    miniWindow.moveTop();
   }
 }
 
@@ -613,7 +685,9 @@ if (!gotTheLock) {
   // 已有實例在運行，退出新實例
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (event, argv) => {
+    // The watchdog task launches us every minute; when we are alive, just ignore it.
+    if (argv && argv.includes(watchdog.WATCHDOG_ARG)) return;
     // 使用者嘗試開第二個實例 → 把現有視窗拉回前景
     if (mainWindow) {
       if (!mainWindow.isVisible()) mainWindow.show();
@@ -625,10 +699,15 @@ if (!gotTheLock) {
 
 // 當Electron完成初始化並準備創建瀏覽器窗口時調用此方法
 app.whenReady().then(() => {
+  // A duplicate instance (e.g. launched by the watchdog) must not touch the guard file.
+  if (!gotTheLock) return;
+  setupGuard();
   setupIpcHandlers();
   createWindow();
   createTray();
   registerGlobalShortcuts();
+  guard.resumeUi();
+  syncWatchdog(guard.state.identity);
 
   // 初始化自動更新器
   const autoUpdater = setupAutoUpdater();
@@ -664,36 +743,47 @@ app.on('activate', () => {
   }
 });
 
+// Remember how we exited so the next start can tell a normal exit from a kill.
+app.on('before-quit', () => {
+  if (guard) guard.markExit('user');
+});
+
 // 清理全局快捷鍵
 app.on('will-quit', () => {
+  displayProbe.stop();
   globalShortcut.unregisterAll();
   console.log('全局快捷鍵已清理');
 });
 
 // 設置應用程式菜單
+// Reload (Ctrl+R) and DevTools (F12) only exist in dev builds: in the installed app they
+// were a way to wipe renderer state and skip the rest period.
+const devMenuItems = app.isPackaged ? [] : [
+  {
+    label: '重新載入',
+    accelerator: 'CmdOrCtrl+R',
+    click: () => {
+      if (mainWindow) {
+        mainWindow.reload();
+      }
+    }
+  },
+  {
+    label: '開發者工具',
+    accelerator: 'F12',
+    click: () => {
+      if (mainWindow) {
+        mainWindow.webContents.toggleDevTools();
+      }
+    }
+  },
+  { type: 'separator' },
+];
 const template = [
   {
     label: '檔案',
     submenu: [
-      {
-        label: '重新載入',
-        accelerator: 'CmdOrCtrl+R',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.reload();
-          }
-        }
-      },
-      {
-        label: '開發者工具',
-        accelerator: 'F12',
-        click: () => {
-          if (mainWindow) {
-            mainWindow.webContents.toggleDevTools();
-          }
-        }
-      },
-      { type: 'separator' },
+      ...devMenuItems,
       {
         label: '退出',
         accelerator: process.platform === 'darwin' ? 'Cmd+Q' : 'Ctrl+Q',
@@ -878,12 +968,23 @@ function setupIpcHandlers() {
       console.warn('timer-start 缺少必要參數:', opts);
       return;
     }
+    // Second line of defence: the renderer already greys the button out, but its state
+    // could be stale, so the guard has the final say.
+    const check = guard ? guard.canStartTimer(opts.totalDuration) : { ok: true };
+    if (!check.ok) {
+      console.log('⛔ 拒絕開始計時:', check.reason);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('timer-start-refused', check.reason);
+      }
+      return;
+    }
     startMainTimer({
       totalDuration: opts.totalDuration,
       user: opts.user,
       category: opts.category || null,
       startTimestamp: opts.startTimestamp || new Date().toISOString(),
     });
+    if (guard) guard.onTimerStart({ category: opts.category || null, totalDuration: opts.totalDuration });
   });
 
   // renderer 點「暫停」
@@ -952,8 +1053,17 @@ function setupIpcHandlers() {
 
   // 迷你視窗：結束計時 → 直接呼叫主計時器 + 通知主視窗 UI 同步
   ipcMain.on('mini-stop', () => {
+    // The mini window doubles as the online-class / wrap-up countdown.
+    if (guard && guard.state.cls) {
+      guard.endClass('manual');
+      return;
+    }
+    if (guard && guard.state.wrapup) {
+      guard.endWrapup('manual');
+      return;
+    }
     console.log('迷你視窗請求結束計時');
-    resetMainTimer();
+    resetMainTimer('mini-stop');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('timer-stopped-by-mini');
     }
@@ -993,6 +1103,7 @@ function setupIpcHandlers() {
 
   ipcMain.on('quit-and-install', () => {
     console.log('退出並安裝更新...');
+    if (guard) guard.markExit('update');
     if (global.autoUpdater) {
       global.autoUpdater.quitAndInstall();
     }
@@ -1020,32 +1131,73 @@ function setupIpcHandlers() {
   ipcMain.on('user-identity', (event, identity) => {
     console.log('👤 收到用戶身份:', identity);
     currentUserIdentity = identity;
-
-    // 小孩身份才啟動閒置偵測
-    if (identity === 'user1' || identity === 'user2') {
-      setupActivityReminder();
-    } else {
-      stopActivityReminder();
-    }
+    guard.setIdentity(identity);
+    guard.refreshRestScreen();
+    syncWatchdog(identity);
   });
 
-  // 渲染進程回報計時狀態
-  ipcMain.on('timer-running-status', (event, isRunning) => {
-    isTimerCurrentlyRunning = isRunning;
-    if (isRunning) {
-      activeSeconds = 0;
-    }
-  });
-
-  // 使用者點「稍後提醒」
-  ipcMain.on('snooze-reminder', (event) => {
-    console.log('💤 稍後提醒，冷卻 5 分鐘');
-    reminderCooldownUntil = Date.now() + 5 * 60 * 1000;
-    activeSeconds = 0;
-    // 取消置頂
+  // 使用者點「稍後提醒」（每輪最多 2 次，由 guard 把關）
+  ipcMain.on('snooze-reminder', () => {
+    const ok = guard.snooze();
+    console.log('💤 稍後提醒', ok ? '已延後 5 分鐘' : '次數已用完');
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.setAlwaysOnTop(false);
     }
+  });
+
+  // Reminder closed via "開始計時" without actually starting: it comes back after 30 s.
+  ipcMain.on('guard-reminder-hidden', () => {
+    guard.reminderHidden();
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.setAlwaysOnTop(false);
+    }
+  });
+
+  // === Usage guard IPC ===
+  ipcMain.on('guard-start-class', () => guard.startClass());
+  ipcMain.on('guard-end-class', () => guard.endClass('manual'));
+  ipcMain.on('guard-start-wrapup', () => guard.startWrapup());
+  ipcMain.on('guard-record-ack', (event, id) => guard.ackRecord(id));
+  ipcMain.handle('guard-get-state', () => guard.snapshot());
+  // Renderer (re)loaded: flush records that were queued while it was not listening.
+  ipcMain.on('guard-ready', () => {
+    guard.resendPending();
+    guard.broadcast();
+    if (guard.state.restEndAt > Date.now() && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('guard-rest-sync', guard.state.restEndAt);
+    }
+  });
+  // Rest end time read back from Firebase (covers a deleted local file / another PC).
+  ipcMain.on('guard-remote-rest', (event, ms) => guard.applyRemoteRest(ms));
+
+  // Buttons on the full-screen rest overlay
+  ipcMain.on('rest-action', (event, action) => {
+    if (action === 'class') guard.startClass();
+    else if (action === 'wrapup') guard.startWrapup();
+    else if (action === 'screen-off') turnOffScreen();
+  });
+
+  // Rest overlay slideshow: list image files in the folder the kid picked.
+  ipcMain.handle('rest-list-folder', (event, folder) => {
+    try {
+      if (!folder || !fs.existsSync(folder)) return [];
+      return fs.readdirSync(folder)
+        .filter(name => /\.(jpe?g|png|gif|webp|bmp)$/i.test(name))
+        .sort()
+        .slice(0, 1000)
+        .map(name => path.join(folder, name));
+    } catch (e) {
+      console.error('讀取休息畫面資料夾失敗:', e.message);
+      return [];
+    }
+  });
+
+  ipcMain.handle('pick-rest-folder', async () => {
+    const res = await dialog.showOpenDialog(mainWindow, {
+      title: '選擇休息畫面要輪播的圖片資料夾',
+      properties: ['openDirectory'],
+    });
+    return res.canceled || !res.filePaths.length ? null : res.filePaths[0];
   });
 
   // 取消視窗置頂（提醒被處理後）
@@ -1066,110 +1218,109 @@ function setupIpcHandlers() {
   });
 
   // 關閉螢幕（螢幕休眠）
-  ipcMain.on('turn-off-screen', () => {
-    console.log('🖥️ 關閉螢幕');
-    const { exec } = require('child_process');
-    exec('powershell -Command "(Add-Type -MemberDefinition \'[DllImport(\\\"user32.dll\\\")] public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);\' -Name ScreenOff -Namespace Win32 -PassThru)::SendMessage(-1, 0x0112, 0xF170, 2)"');
-  });
+  ipcMain.on('turn-off-screen', () => turnOffScreen());
 
-  // 冷卻期開始（計時結束後）：依 renderer 傳來的動態休息時長（毫秒）設定
-  // 休息時間 = 實際用掉的時間（1:1）；未帶值時 fallback 5 分鐘
-  ipcMain.on('cooldown-started', (event, durationMs) => {
-    const ms = (typeof durationMs === 'number' && durationMs > 0) ? durationMs : 5 * 60 * 1000;
-    cooldownEndTime = Date.now() + ms;
-    cooldownReminderShowing = false;
-    console.log(`❄️ 休息冷卻期開始，${Math.round(ms / 1000)} 秒後結束`);
-  });
-
-  // 冷卻期提醒已關閉
-  ipcMain.on('cooldown-dismiss', () => {
-    cooldownReminderShowing = false;
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.setAlwaysOnTop(false);
+  // 🎨 小計時器外觀改了 → 通知開著的迷你視窗重新套用（設定存在共用的 localStorage）
+  ipcMain.on('mini-appearance-changed', () => {
+    if (miniWindow && !miniWindow.isDestroyed()) {
+      miniWindow.webContents.send('mini-appearance-changed');
     }
   });
 }
 
-// 啟動活動偵測提醒
-function setupActivityReminder() {
-  if (activityCheckInterval) return;
-
-  console.log('🔍 啟動活動偵測提醒');
-  activityCheckInterval = setInterval(() => {
-    const idleTime = powerMonitor.getSystemIdleTime();
-
-    if (idleTime < 5) {
-      activeSeconds += 5;
-    } else {
-      activeSeconds = 0;
-    }
-
-    const now = Date.now();
-    const isChild = currentUserIdentity === 'user1' || currentUserIdentity === 'user2';
-
-    // 冷卻期內偵測到活動 → 顯示休息提醒
-    if (
-      isChild &&
-      now < cooldownEndTime &&
-      idleTime < 5 &&
-      !cooldownReminderShowing
-    ) {
-      const remainingMs = cooldownEndTime - now;
-      const remainingSec = Math.ceil(remainingMs / 1000);
-      console.log('😴 冷卻期內偵測到活動，剩餘', remainingSec, '秒');
-      cooldownReminderShowing = true;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.setAlwaysOnTop(true);
-        mainWindow.focus();
-        mainWindow.webContents.send('show-cooldown-reminder', remainingSec);
-      }
-    }
-
-    // 冷卻期內持續更新剩餘時間
-    if (isChild && now < cooldownEndTime && cooldownReminderShowing) {
-      const remainingSec = Math.ceil((cooldownEndTime - now) / 1000);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('update-cooldown-time', remainingSec);
-      }
-    }
-
-    // 冷卻期結束
-    if (cooldownEndTime > 0 && now >= cooldownEndTime) {
-      cooldownEndTime = 0;
-      cooldownReminderShowing = false;
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('cooldown-ended');
-        mainWindow.setAlwaysOnTop(false);
-      }
-    }
-
-    // 一般閒置提醒（非冷卻期）
-    if (
-      activeSeconds >= 60 &&
-      !isTimerCurrentlyRunning &&
-      isChild &&
-      now > reminderCooldownUntil &&
-      now >= cooldownEndTime
-    ) {
-      console.log('⏰ 偵測到使用電腦但未計時，發送提醒');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.show();
-        mainWindow.setAlwaysOnTop(true);
-        mainWindow.focus();
-        mainWindow.webContents.send('show-timer-reminder');
-      }
-      reminderCooldownUntil = now + 5 * 60 * 1000;
-      activeSeconds = 0;
-    }
-  }, 5000);
+function turnOffScreen() {
+  console.log('🖥️ 關閉螢幕');
+  const { exec } = require('child_process');
+  exec('powershell -Command "(Add-Type -MemberDefinition \'[DllImport(\\\"user32.dll\\\")] public static extern int SendMessage(int hWnd, int hMsg, int wParam, int lParam);\' -Name ScreenOff -Namespace Win32 -PassThru)::SendMessage(-1, 0x0112, 0xF170, 2)"');
 }
 
-// 停止活動偵測
-function stopActivityReminder() {
-  if (activityCheckInterval) {
-    clearInterval(activityCheckInterval);
-    activityCheckInterval = null;
-    console.log('🛑 停止活動偵測提醒');
+function sendToMain(channel, ...args) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send(channel, ...args);
   }
+}
+
+// Mini window reused as the online-class / wrap-up countdown (pause button hidden).
+function formatMmSs(sec) {
+  const s = Math.max(0, sec);
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+}
+function showModeMini(label, remainingSec) {
+  miniGuardMode = true;
+  isMinimized = true;
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.hide();
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.show();
+    miniWindow.webContents.send('update-mini-display', formatMmSs(remainingSec), label, true);
+  } else {
+    createMiniWindow(formatMmSs(remainingSec), label);
+  }
+}
+function updateModeMini(label, remainingSec) {
+  if (miniWindow && !miniWindow.isDestroyed()) {
+    miniWindow.webContents.send('update-mini-display', formatMmSs(remainingSec), label, true);
+  }
+}
+function hideModeMini() {
+  if (!miniGuardMode) return;
+  miniGuardMode = false;
+  closeMiniWindow();
+  isMinimized = false;
+}
+
+function setupGuard() {
+  displayProbe.start();
+  guard = new UsageGuard({
+    getIdleSec: () => powerMonitor.getSystemIdleTime(),
+    getVideoActive: () => displayProbe.isVideoActive(),
+    getTimerInfo: () => ({
+      active: timerState.isRunning,
+      paused: timerState.isPaused,
+      elapsedSec: Math.max(0, timerState.totalDuration - timerState.remainingSec),
+    }),
+    getTimerElapsedSec: () => Math.max(0, timerState.totalDuration - timerState.remainingSec),
+    forceStopTimer: (reason) => forceStopTimer(reason),
+    onState: (snap) => {
+      sendToMain('guard-state', snap);
+      restWindows.send(snap);
+    },
+    emitRecord: (rec) => sendToMain('guard-record', rec),
+    onRestChanged: (ms) => sendToMain('guard-rest-sync', ms),
+    onRestEnded: () => sendToMain('guard-rest-ended'),
+    showRest: () => restWindows.show(),
+    hideRest: () => restWindows.hide(),
+    showReminder: (payload) => {
+      if (!mainWindow || mainWindow.isDestroyed()) return;
+      mainWindow.show();
+      // 'screen-saver' level, otherwise a full-screen video can sit on top of the reminder
+      mainWindow.setAlwaysOnTop(true, 'screen-saver');
+      mainWindow.focus();
+      mainWindow.webContents.send('show-timer-reminder', payload);
+    },
+    hideReminder: () => {
+      sendToMain('hide-timer-reminder');
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.setAlwaysOnTop(false);
+    },
+    showModeMini,
+    updateModeMini,
+    hideModeMini,
+    lockWorkstation: () => {
+      console.log('🔒 休息中持續使用，鎖定 Windows');
+      execFile('rundll32.exe', ['user32.dll,LockWorkStation'], { windowsHide: true }, () => {});
+    },
+  });
+  guard.load(app.getPath('userData'));
+  currentUserIdentity = guard.state.identity;
+  guard.recoverAfterStart();
+  guard.start();
+}
+
+// Keep the watchdog task in line with the identity: kids get it, parents do not.
+// Dev runs (npm start) never install it, otherwise it would relaunch electron.exe.
+function syncWatchdog(identity) {
+  if (!app.isPackaged || !identity || identity === watchdogIdentity) return;
+  watchdogIdentity = identity;
+  const isChild = identity === 'user1' || identity === 'user2';
+  const job = isChild ? watchdog.installWatchdog(process.execPath) : watchdog.removeWatchdog();
+  job.then(res => console.log(`🐕 watchdog ${isChild ? 'install' : 'remove'}:`, res.ok, res.detail));
 }
