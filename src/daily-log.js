@@ -77,6 +77,11 @@ document.addEventListener('DOMContentLoaded', function() {
             case 'wrapup':
                 icon = '⏳';
                 break;
+            case 'music':
+                // rest overlay stepped aside 60 s to open a music app (not counted)
+                icon = '🎧';
+                cls = 'log-event';
+                break;
             case 'overtime':
                 icon = '🔒';
                 label = '休息中持續使用';
@@ -128,6 +133,8 @@ document.addEventListener('DOMContentLoaded', function() {
         if (wrapup.length) parts.push(`⏳ 收尾 ${wrapup.length} 次`);
         if (overtime.length) parts.push(`<span class="sum-warn">🔒 休息中被鎖定 ${overtime.length} 次</span>`);
         if (snoozes) parts.push(`💤 稍後提醒 ${snoozes} 次`);
+        const musicBreaks = rows.filter(r => r.kind === 'music');
+        if (musicBreaks.length) parts.push(`🎧 休息中設定音樂 ${musicBreaks.length} 次`);
         if (cls.length) parts.push(`<span class="sum-class">📘 線上課 ${cls.length} 段 ${fmtDuration(sum(cls))}（不算總計）</span>`);
         if (gaps.length) parts.push(`<span class="sum-warn">⚠️ 計時程式沒執行 ${gaps.length} 次</span>`);
         if (identitySwitches.length) parts.push(`<span class="sum-warn">⚠️ 切換身份 ${identitySwitches.length} 次</span>`);

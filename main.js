@@ -7,6 +7,7 @@ const { UsageGuard } = require('./lib/usage-guard');
 const { RestWindows } = require('./lib/rest-window');
 const watchdog = require('./lib/watchdog');
 const { DisplayProbe } = require('./lib/display-probe');
+const music = require('./lib/music');
 
 // 禁用硬體加速以避免 WSL 環境的 GPU 錯誤
 // 只有在 app 可用時才呼叫
@@ -1175,6 +1176,10 @@ function setupIpcHandlers() {
     if (action === 'class') guard.startClass();
     else if (action === 'wrapup') guard.startWrapup();
     else if (action === 'screen-off') turnOffScreen();
+    else if (action === 'music') guard.startMusicBreak();
+    else if (action === 'media-playpause') music.sendMediaKey('playpause');
+    else if (action === 'media-next') music.sendMediaKey('next');
+    else if (action === 'media-prev') music.sendMediaKey('prev');
   });
 
   // Rest overlay slideshow: list image files in the folder the kid picked.
@@ -1289,6 +1294,7 @@ function setupGuard() {
     onRestEnded: () => sendToMain('guard-rest-ended'),
     showRest: () => restWindows.show(),
     hideRest: () => restWindows.hide(),
+    openMusicApp: () => { music.openMusicApp(); },
     showReminder: (payload) => {
       if (!mainWindow || mainWindow.isDestroyed()) return;
       mainWindow.show();

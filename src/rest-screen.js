@@ -15,6 +15,7 @@
     const btnWrapup = el('btn-wrapup');
     const btnClass = el('btn-class');
     const btnScreenOff = el('btn-screen-off');
+    const btnMusic = el('btn-music');
     const slideControls = el('slide-controls');
     const slidePause = el('slide-pause');
     const slideNext = el('slide-next');
@@ -125,6 +126,7 @@
         } else {
             headline.textContent = '休息時間';
         }
+        btnMusic.classList.toggle('hidden', !snap.musicBreakAvailable);
         if (snap.wrapupAvailable) {
             btnWrapup.classList.remove('hidden');
             btnWrapup.textContent = `⏳ 收尾 5 分鐘（${mmss(snap.wrapupOfferRemainingSec)} 內可以按）`;
@@ -138,6 +140,10 @@
     btnWrapup.addEventListener('click', () => window.api.send('rest-action', 'wrapup'));
     btnClass.addEventListener('click', () => window.api.send('rest-action', 'class'));
     btnScreenOff.addEventListener('click', () => window.api.send('rest-action', 'screen-off'));
+    btnMusic.addEventListener('click', () => window.api.send('rest-action', 'music'));
+    el('btn-media-prev').addEventListener('click', () => window.api.send('rest-action', 'media-prev'));
+    el('btn-media-playpause').addEventListener('click', () => window.api.send('rest-action', 'media-playpause'));
+    el('btn-media-next').addEventListener('click', () => window.api.send('rest-action', 'media-next'));
 
     setupBackground();
 })();

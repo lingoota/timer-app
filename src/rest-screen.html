@@ -39,6 +39,9 @@
         button:hover { background: rgba(255,255,255,0.25); }
         .btn-wrapup { background: rgba(255, 179, 71, 0.35); border-color: rgba(255, 179, 71, 0.8); }
         .btn-class { background: rgba(80, 160, 255, 0.35); border-color: rgba(80, 160, 255, 0.8); }
+        .music-row { margin-top: 12px; }
+        .music-row button { padding: 8px 16px; font-size: 16px; }
+        .btn-music { background: rgba(120, 220, 140, 0.3); border-color: rgba(120, 220, 140, 0.8); }
         .hidden { display: none !important; }
         .slide-controls {
             position: fixed; right: 24px; top: 24px; display: flex; gap: 8px;
@@ -64,6 +67,13 @@
             <button id="btn-wrapup" class="btn-wrapup hidden">⏳ 收尾 5 分鐘</button>
             <button id="btn-class" class="btn-class">📘 線上課</button>
             <button id="btn-screen-off">🖥️ 關閉螢幕</button>
+        </div>
+        <!-- 聽音樂不算使用：多媒體鍵控制 + 每次休息一次 60 秒去開音樂 -->
+        <div class="buttons music-row">
+            <button id="btn-media-prev" title="上一首">⏮</button>
+            <button id="btn-media-playpause" title="播放／暫停">⏯</button>
+            <button id="btn-media-next" title="下一首">⏭</button>
+            <button id="btn-music" class="btn-music">🎧 設定音樂（1 分鐘）</button>
         </div>
     </div>
 

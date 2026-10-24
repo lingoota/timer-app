@@ -51,7 +51,9 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         let text = '';
-        if (snap.mode === 'rest') {
+        if (snap.mode === 'rest' && snap.musicBreakRemainingSec > 0) {
+            text = `🎧 設定音樂中，${snap.musicBreakRemainingSec} 秒後回到休息畫面（休息還有 ${mmss(snap.restRemainingSec)}）`;
+        } else if (snap.mode === 'rest') {
             text = `😴 休息中，還有 ${mmss(snap.restRemainingSec)}`;
         } else if (snap.mode === 'class') {
             text = '📘 線上課中：不計時、不提醒，下課後休息 5 分鐘';
