@@ -62,6 +62,13 @@ document.addEventListener('DOMContentLoaded', function() {
                 if (r.legacy) notes.push('舊版記錄，開始時間為推算');
                 break;
             case 'untimed':
+                if (r.flags && r.flags.includes('prep-grace')) {
+                    // ≤3 min getting ready before starting the timer, no snooze: free
+                    icon = '⏱️';
+                    cls = 'log-event';
+                    notes.push('開始計時前的準備，不計');
+                    break;
+                }
                 icon = '⚠️';
                 if (r.snoozes) notes.push(`稍後提醒 ×${r.snoozes}`);
                 // Never touched keyboard/mouse: only a playing video was detected
@@ -107,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function() {
     function summarise(rows) {
         const sum = (list) => list.reduce((a, r) => a + (r.duration || 0), 0);
         const timed = rows.filter(r => r.kind === 'timed');
-        const untimed = rows.filter(r => r.kind === 'untimed');
+        const untimed = rows.filter(r => r.kind === 'untimed' && r.counted !== false);
         const overtime = rows.filter(r => r.kind === 'overtime');
         const wrapup = rows.filter(r => r.kind === 'wrapup');
         const cls = rows.filter(r => r.kind === 'class');
