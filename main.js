@@ -1280,7 +1280,12 @@ function hideModeMini() {
 function setupGuard() {
   displayProbe.start();
   guard = new UsageGuard({
-    getIdleSec: () => powerMonitor.getSystemIdleTime(),
+    // Real keyboard / mouse / gamepad input from the probe; games that fake the Windows
+    // last-input time are ignored. Probe down -> fall back to the Windows idle time.
+    getIdleSec: () => {
+      const sec = displayProbe.getInputIdleSec();
+      return sec === null ? powerMonitor.getSystemIdleTime() : sec;
+    },
     getVideoActive: () => displayProbe.isVideoActive(),
     getTimerInfo: () => ({
       active: timerState.isRunning,
