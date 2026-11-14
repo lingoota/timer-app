@@ -69,6 +69,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     notes.push('開始計時前的準備，不計');
                     break;
                 }
+                if (r.flags && r.flags.includes('brief')) {
+                    // <=5 min in use, then walked away for 10 min: forgiven, no rest
+                    icon = '👆';
+                    cls = 'log-event';
+                    notes.push('用一下就離開，不計');
+                    if (r.flags.includes('video-only')) notes.push('只偵測到畫面在播放');
+                    break;
+                }
                 icon = '⚠️';
                 if (r.snoozes) notes.push(`稍後提醒 ×${r.snoozes}`);
                 // Never touched keyboard/mouse: only a playing video was detected

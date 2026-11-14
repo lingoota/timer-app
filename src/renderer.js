@@ -279,12 +279,37 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateTimeButtonsForAllowance(guard) {
         const allowanceMin = guard ? Math.floor((guard.allowanceSec + 30) / 60) : 30;
         dom.timeButtons.forEach(btn => {
+            if (btn.dataset.max === '1') {
+                updateMaxButton(btn, allowanceMin);
+                return;
+            }
             const m = parseInt(btn.dataset.minutes);
             if (isNaN(m)) return; // 「其他」：由輸入驗證把關
             btn.disabled = !state.isRunning && m > allowanceMin;
             btn.classList.toggle('over-allowance', m > allowanceMin);
         });
         if (dom.customMinutesInput) dom.customMinutesInput.max = String(Math.max(1, Math.min(30, allowanceMin)));
+    }
+
+    // The 30-min button becomes "最多 N分鐘" when the round has less left, so a kid never
+    // drops from 30 straight to 20 after a few minutes of untimed use (2026-11-14 request).
+    function updateMaxButton(btn, allowanceMin) {
+        if (state.isRunning || state.isPaused) return; // a set timer keeps its duration
+        const cap = Math.min(30, allowanceMin);
+        const minutes = Math.max(1, cap);
+        if (btn.dataset.minutes !== String(minutes)) {
+            btn.dataset.minutes = String(minutes);
+            btn.textContent = cap >= 30 ? '30分鐘' : `最多 ${minutes}分鐘`;
+            // Already selected: follow the shrinking allowance so 開始 stays usable.
+            if (btn.classList.contains('active')) {
+                state.totalDuration = minutes * 60;
+                state.timeLeft = state.totalDuration;
+                updateDisplay();
+                updateProgressBar();
+            }
+        }
+        btn.disabled = cap < 1;
+        btn.classList.toggle('over-allowance', cap < 1);
     }
     
     // 齒輪設定面板展開/收折
