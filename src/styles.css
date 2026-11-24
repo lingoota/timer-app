@@ -855,6 +855,17 @@ body {
     opacity: 1;
 }
 
+/* Shown when Firebase has not answered for a while (numbers on screen may be stale) */
+.sync-warning {
+    margin: 4px 0 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255, 152, 0, 0.85);
+    color: #fff;
+    font-size: 13px;
+    font-weight: 600;
+}
+
 /* 同步狀態 */
 .sync-status {
     position: absolute;

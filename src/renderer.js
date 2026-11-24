@@ -1155,7 +1155,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     
     // 從 Firebase 載入數據 (新版)
-    async function loadDataFromSheets() {
+    // silent: periodic / after-write refreshes, no toast.
+    let statsLoading = false;
+    async function loadDataFromSheets(silent = false) {
+        if (statsLoading) return;
+        statsLoading = true;
         updateSyncStatus('正在載入...', true);
 
         console.log("=== 載入 Firebase 數據 ===");
@@ -1187,16 +1191,42 @@ document.addEventListener('DOMContentLoaded', function() {
             saveLocalBackup();
 
             updateSyncStatus('已同步 ☁️');
-            showToast('已從 Firebase 載入今日使用記錄');
+            if (!silent) showToast('已從 Firebase 載入今日使用記錄');
         } catch (error) {
+            // Keep the last good numbers on screen; the sync warning tells how old they are.
             updateSyncStatus('載入錯誤');
-            showToast('Firebase 載入失敗，使用本地備份');
+            if (!silent) showToast('Firebase 載入失敗，使用本地備份');
             console.error('Error in loadDataFromFirebase:', error);
+        } finally {
+            statsLoading = false;
+            updateSyncWarning();
         }
     }
-    
+
     // 記錄寫入改由 guard-client.js 處理（main 進程 usage guard 產生記錄 → 寫 Firebase → 回 ack）
-    window.appReloadStats = () => loadDataFromSheets();
+    window.appReloadStats = () => loadDataFromSheets(true);
+
+    // Stats used to reload only at startup and after a record was written, so a stuck write
+    // froze them for days and they never rolled over at midnight. Reload on a timer too.
+    const STATS_RELOAD_MS = 2 * 60 * 1000;
+    const SYNC_WARN_AFTER_MS = 5 * 60 * 1000;
+    const appStartedAt = Date.now();
+    setInterval(() => loadDataFromSheets(true), STATS_RELOAD_MS);
+
+    function updateSyncWarning() {
+        const el = document.getElementById('sync-warning');
+        if (!el || !window.firebaseStaleMs) return;
+        const stale = window.firebaseStaleMs();
+        const sinceStart = Date.now() - appStartedAt;
+        if (stale <= SYNC_WARN_AFTER_MS || sinceStart <= SYNC_WARN_AFTER_MS) {
+            el.classList.add('hidden');
+            return;
+        }
+        const minutes = Math.floor(Math.min(stale, sinceStart) / 60000);
+        el.textContent = `⚠️ 已經 ${minutes} 分鐘連不上雲端，下面的數字可能不是最新的`;
+        el.classList.remove('hidden');
+    }
+    setInterval(updateSyncWarning, 30 * 1000);
 
     // 更新同步狀態
     function updateSyncStatus(status, isLoading = false) {

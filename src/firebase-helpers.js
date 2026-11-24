@@ -15,7 +15,99 @@ async function waitForFirebase() {
         throw new Error('Firebase 初始化失敗');
     }
 
-    return { db: window.firebaseDB, functions: window.firestoreFunctions };
+    return { db: window.firebaseDB, functions: guardedFunctions() };
+}
+
+// ---------- hang protection ----------
+// Incident 2026-11-22..24: on one PC getDoc() stopped settling (never resolved, never
+// rejected) for two days. Record writes are a serial queue that reads first, so every
+// record queued behind the hung one; the daily log's "refreshing" flag stayed set, so the
+// screen froze on 11-22. setDoc-only writes (rest sync) kept working. A forced restart
+// flushed all queued records. So: every Firestore call gets a timeout, consecutive
+// timeouts trigger a network reset, and the UI can ask how long since the last success.
+const FB_TIMEOUT_MS = 15000;
+const FB_RECONNECT_AFTER = 2;            // consecutive timeouts before resetting the network
+const FB_RECONNECT_COOLDOWN_MS = 60000;
+const fbHealth = { lastOkAt: 0, consecutiveTimeouts: 0, lastReconnectAt: 0, reconnecting: false };
+let guardedCache = null;
+
+function withTimeout(promise, label) {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+        timer = setTimeout(() => {
+            const err = new Error(`Firebase ${label} 逾時 (${FB_TIMEOUT_MS / 1000}s)`);
+            err.isTimeout = true;
+            reject(err);
+        }, FB_TIMEOUT_MS);
+    });
+    return Promise.race([promise, timeout]).then(
+        (value) => {
+            clearTimeout(timer);
+            fbHealth.lastOkAt = Date.now();
+            fbHealth.consecutiveTimeouts = 0;
+            return value;
+        },
+        (err) => {
+            clearTimeout(timer);
+            if (err && err.isTimeout) {
+                fbHealth.consecutiveTimeouts++;
+                maybeReconnect();
+            }
+            throw err;
+        }
+    );
+}
+
+// Drop and re-open Firestore's streams; a wedged listen stream is the likely cause of a
+// getDoc that never settles. Fire-and-forget: callers already failed with a timeout.
+async function maybeReconnect() {
+    const f = window.firestoreFunctions;
+    const db = window.firebaseDB;
+    if (!f || !db || !f.disableNetwork || !f.enableNetwork) return;
+    if (fbHealth.reconnecting || fbHealth.consecutiveTimeouts < FB_RECONNECT_AFTER) return;
+    if (Date.now() - fbHealth.lastReconnectAt < FB_RECONNECT_COOLDOWN_MS) return;
+    fbHealth.reconnecting = true;
+    fbHealth.lastReconnectAt = Date.now();
+    console.warn('⚠️ Firebase 連續逾時，重新建立連線');
+    const step = (p) => Promise.race([p, new Promise(r => setTimeout(r, FB_TIMEOUT_MS))]);
+    try {
+        await step(f.disableNetwork(db));
+        await step(f.enableNetwork(db));
+    } catch (e) {
+        console.error('❌ Firebase 重新連線失敗:', e);
+    } finally {
+        fbHealth.reconnecting = false;
+    }
+}
+
+// Same Firestore namespace, with every call that talks to the server wrapped in a timeout.
+function guardedFunctions() {
+    if (guardedCache) return guardedCache;
+    const raw = window.firestoreFunctions;
+    if (!raw) return raw;
+    const wrapped = Object.assign({}, raw);
+    ['getDoc', 'getDocs', 'setDoc', 'updateDoc', 'addDoc', 'deleteDoc'].forEach(name => {
+        if (typeof raw[name] === 'function') {
+            wrapped[name] = (...args) => withTimeout(raw[name](...args), name);
+        }
+    });
+    guardedCache = wrapped;
+    return wrapped;
+}
+
+// Milliseconds since the last Firestore call that succeeded (Infinity before the first).
+function firebaseStaleMs() {
+    return fbHealth.lastOkAt ? Date.now() - fbHealth.lastOkAt : Infinity;
+}
+
+// A day's total from its records, not the totalTime counter: a write that timed out but
+// still committed later can be retried, and the retry's increment() would double-count.
+// arrayUnion already dedupes the identical record. Days with legacy records (no `kind`,
+// written before beta.23) fall back to the stored counter.
+function dayTotalSec(data) {
+    const records = data.records || [];
+    if (records.length === 0 || records.some(r => !r.kind)) return data.totalTime || 0;
+    return records.filter(isCountedRecord).reduce((s, r) => s + (r.duration || 0), 0);
 }
 
 /**
@@ -254,8 +346,9 @@ async function getTodayActivities(userId) {
             return [];
         }
     } catch (error) {
+        // Rethrow: returning [] would blank the daily log ("no records yet") on a timeout.
         console.error(`❌ Firebase: 取得今天活動失敗 (${userId}):`, error);
-        return [];
+        throw error;
     }
 }
 
@@ -288,7 +381,7 @@ async function getTodayStats() {
         const pinyuDoc = await getDoc(pinyuRef);
         if (pinyuDoc.exists()) {
             const data = pinyuDoc.data();
-            stats.pinyu.totalTime = data.totalTime || 0;
+            stats.pinyu.totalTime = dayTotalSec(data);
             stats.pinyu.records = data.records || [];
 
             // 統計各活動類型的時間（線上課、事件記錄不算）
@@ -303,7 +396,7 @@ async function getTodayStats() {
         const pinrongDoc = await getDoc(pinrongRef);
         if (pinrongDoc.exists()) {
             const data = pinrongDoc.data();
-            stats.pinrong.totalTime = data.totalTime || 0;
+            stats.pinrong.totalTime = dayTotalSec(data);
             stats.pinrong.records = data.records || [];
 
             // 統計各活動類型的時間（線上課、事件記錄不算）
@@ -316,11 +409,9 @@ async function getTodayStats() {
         console.log('📊 Firebase: 今日統計', stats);
         return stats;
     } catch (error) {
+        // Rethrow: zeros would overwrite the last good numbers on screen with a timeout.
         console.error('❌ Firebase: 取得今天統計失敗:', error);
-        return {
-            pinyu: { totalTime: 0, activities: {}, records: [] },
-            pinrong: { totalTime: 0, activities: {}, records: [] }
-        };
+        throw error;
     }
 }
 
@@ -417,8 +508,8 @@ async function getHistoryStats(days) {
                     getDoc(doc(db, 'users', 'pinyu', 'activities', dateString)),
                     getDoc(doc(db, 'users', 'pinrong', 'activities', dateString))
                 ]);
-                if (pinyuDoc.exists()) pinyuTime = pinyuDoc.data().totalTime || 0;
-                if (pinrongDoc.exists()) pinrongTime = pinrongDoc.data().totalTime || 0;
+                if (pinyuDoc.exists()) pinyuTime = dayTotalSec(pinyuDoc.data());
+                if (pinrongDoc.exists()) pinrongTime = dayTotalSec(pinrongDoc.data());
             } catch (e) {
                 // 某天資料讀取失敗，跳過
             }
@@ -452,3 +543,4 @@ window.writeGuardRecord = writeGuardRecord;
 window.setRestEndAt = setRestEndAt;
 window.getRestEndAt = getRestEndAt;
 window.isTimedRecord = isTimedRecord;
+window.firebaseStaleMs = firebaseStaleMs;
